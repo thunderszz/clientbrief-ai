@@ -1,0 +1,28 @@
+# Environment / secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Cache
+.clientbrief_cache/
+
+# Output briefs
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+.claude/
