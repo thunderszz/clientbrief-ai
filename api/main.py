@@ -110,7 +110,11 @@ def create_app(
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
-        return {"status": "ok"}
+        return {
+            "status": "ok",
+            "demos": len(list_demos(demo_dir)),
+            "web_app": (web_dist / "index.html").is_file(),
+        }
 
     @app.get("/api/config")
     def config() -> dict[str, Any]:

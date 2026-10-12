@@ -46,3 +46,14 @@ def test_vercel_services_route_everything_to_the_fastapi_app():
     assert config["rewrites"] == [{"source": "/(.*)", "destination": {"service": "app"}}]
     # In services mode build and runtime keys are invalid at the top level.
     assert not {"functions", "buildCommand", "framework"} & set(config)
+
+
+def test_vercel_bundle_includes_runtime_data_files():
+    # The function reads demo recordings and the built web app from disk at runtime;
+    # Vercel's Python bundler does not pick them up unless they are listed.
+    config = json.loads((ROOT / "vercel.json").read_text())
+    function = config["services"]["app"]["functions"]["api/main.py"]
+
+    assert "demo/**" in function["includeFiles"]
+    assert "web/dist/**" in function["includeFiles"]
+    assert "demo" not in function["excludeFiles"]

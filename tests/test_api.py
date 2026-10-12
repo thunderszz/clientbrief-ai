@@ -118,6 +118,13 @@ def test_health(demo_dir):
     assert response.json()["status"] == "ok"
 
 
+def test_health_reports_bundled_demos_and_web_app(demo_dir):
+    body = make_client(demo_dir).get("/api/health").json()
+
+    assert body["demos"] == 1
+    assert body["web_app"] is False
+
+
 def test_config_describes_pipeline_and_server_runs(demo_dir):
     body = make_client(demo_dir, quota_limit=3).get("/api/config").json()
 

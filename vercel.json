@@ -9,12 +9,18 @@
       "functions": {
         "api/main.py": {
           "maxDuration": 300,
+          "includeFiles": "{demo/**,web/dist/**}",
           "excludeFiles": "{tests/**,docs/**,output/**,web/node_modules/**,web/src/**,web/public/**,**/__pycache__/**}"
         }
       }
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": { "service": "app" } }
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "app"
+      }
+    }
   ]
 }
