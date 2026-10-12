@@ -62,8 +62,8 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 _DEFAULT_TEMPERATURE = 0.1  # low temp for extraction tasks
-_GEMINI_DEFAULT_FAST = "gemini-3.5-flash-lite"
-_GEMINI_DEFAULT_REASONING = "gemini-3.6-flash"
+GEMINI_DEFAULT_FAST = "gemini-3.5-flash-lite"
+GEMINI_DEFAULT_REASONING = "gemini-3.6-flash"
 
 _PRIMARY_ATTEMPTS = 3
 _FALLBACK_ATTEMPTS = 2
@@ -124,8 +124,8 @@ def settings_from_env() -> LLMSettings:
         return LLMSettings(
             provider="gemini",
             api_key=api_key,
-            model_fast=os.environ.get("LLM_MODEL_FAST") or _GEMINI_DEFAULT_FAST,
-            model_reasoning=os.environ.get("LLM_MODEL_REASONING") or _GEMINI_DEFAULT_REASONING,
+            model_fast=os.environ.get("LLM_MODEL_FAST") or GEMINI_DEFAULT_FAST,
+            model_reasoning=os.environ.get("LLM_MODEL_REASONING") or GEMINI_DEFAULT_REASONING,
         )
 
     if provider == "openai_compatible":

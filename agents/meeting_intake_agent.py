@@ -454,6 +454,17 @@ def run(raw_meeting_context: str) -> dict[str, Any]:
             })
             low_confidence_names.add(fname)
 
+    # --- A domain written verbatim in the user's text is not a guess ---------
+    # Small models sometimes flag explicitly stated values as low-confidence.
+    stated_domain = extracted.get("domain")
+    if (
+        "domain" in low_confidence_names
+        and stated_domain
+        and stated_domain.lower() in raw_meeting_context.lower()
+    ):
+        low_confidence = [lc for lc in low_confidence if lc["field"] != "domain"]
+        low_confidence_names.discard("domain")
+
     # --- Null out low-confidence domain (avoid poisoning research queries) ----
     if "domain" in low_confidence_names and extracted.get("domain"):
         logger.info(

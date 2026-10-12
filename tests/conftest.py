@@ -1,6 +1,11 @@
 """Shared test fixtures. Tests are fully offline: no network, no real keys."""
 
+import os
+
 import pytest
+
+# The API loads .env on import for local dev; tests must never see real keys.
+os.environ["CLIENTBRIEF_SKIP_DOTENV"] = "1"
 
 _CLEARED_ENV = [
     "LLM_PROVIDER",
