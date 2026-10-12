@@ -123,7 +123,8 @@ docker run -p 8000:8000 --env-file .env clientbrief-ai
 | `LLM_MODEL_FAST` | `gemini-3.5-flash-lite` | Model for extraction steps |
 | `LLM_MODEL_REASONING` | `gemini-3.6-flash` | Model for audience, pain points and strategy |
 | `TAVILY_API_KEY` | | Web search for the research agents |
-| `PUBLIC_DAILY_RUNS` | unlimited | Live runs per day on the server's keys; `0` on a public deploy |
+| `PUBLIC_DAILY_RUNS` | unlimited | Live runs per day on the server's keys |
+| `PUBLIC_RUNS_UNTIL` | | Last day (`YYYY-MM-DD`) live runs may use the server's keys; after it, visitors need their own |
 
 To record a new demo from a real run: `python -m scripts.record_demo --slug acme --title "Acme" --text "…"`.
 

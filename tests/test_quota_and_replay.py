@@ -36,6 +36,34 @@ def test_quota_resets_next_day():
     assert quota.try_consume() is True
 
 
+def test_quota_stops_after_end_date():
+    today = [date(2026, 11, 5)]
+    quota = DailyQuota(5, today=lambda: today[0], until=date(2026, 11, 5))
+
+    assert quota.try_consume() is True
+    assert quota.remaining == 4
+    today[0] = date(2026, 11, 6)
+    assert quota.remaining == 0
+    assert quota.try_consume() is False
+
+
+def test_unlimited_quota_also_respects_end_date():
+    quota = DailyQuota(None, today=lambda: date(2026, 11, 6), until=date(2026, 11, 5))
+
+    assert quota.remaining == 0
+    assert quota.has_remaining() is False
+
+
+def test_quota_from_env_reads_end_date(monkeypatch):
+    monkeypatch.setenv("PUBLIC_DAILY_RUNS", "3")
+    monkeypatch.setenv("PUBLIC_RUNS_UNTIL", "2026-11-05")
+
+    quota = DailyQuota.from_env()
+
+    assert quota._limit == 3
+    assert quota._until == date(2026, 11, 5)
+
+
 def _collect(events, **kwargs):
     delays: list[float] = []
 
