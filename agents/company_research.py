@@ -11,7 +11,7 @@ Ownership:  ``company_profile`` only.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -33,10 +33,10 @@ class CompanyProfile(BaseModel):
     Use null / empty lists when evidence is insufficient.
     """
 
-    industry: Optional[str] = Field(
+    industry: str | None = Field(
         None, description="Primary industry the company operates in."
     )
-    business_model: Optional[str] = Field(
+    business_model: str | None = Field(
         None, description="How the company makes money (e.g. SaaS, marketplace, manufacturing)."
     )
     products: list[str] = Field(
@@ -51,7 +51,7 @@ class CompanyProfile(BaseModel):
         default_factory=list,
         description="Regions or countries where the company operates.",
     )
-    company_positioning: Optional[str] = Field(
+    company_positioning: str | None = Field(
         None, description="How the company positions itself competitively."
     )
     complexity_signals: list[str] = Field(
@@ -92,7 +92,7 @@ def _collect_evidence(
     """Run Tavily queries and return (evidence_snippets, source_urls)."""
     try:
         client = TavilySearchClient()
-    except EnvironmentError as exc:
+    except OSError as exc:
         logger.warning("Tavily client init failed: %s", exc)
         return [], []
 

@@ -25,7 +25,7 @@ Ownership:  standalone pre-processing — not a LangGraph node.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -61,14 +61,14 @@ class MeetingIntakeResult(BaseModel):
     """
 
     # --- Core workflow fields ------------------------------------------------
-    company_name: Optional[str] = Field(
+    company_name: str | None = Field(
         None,
         description=(
             "The company being met with.  Extract the official name if "
             "mentioned.  Return null if no company is identifiable."
         ),
     )
-    domain: Optional[str] = Field(
+    domain: str | None = Field(
         None,
         description=(
             "The company's web domain (e.g. 'stripe.com').  If not "
@@ -76,21 +76,21 @@ class MeetingIntakeResult(BaseModel):
             "Return null if uncertain — do NOT guess for obscure companies."
         ),
     )
-    contact_name: Optional[str] = Field(
+    contact_name: str | None = Field(
         None,
         description=(
             "Full name of the specific person to be met.  Return null "
             "if no individual name is mentioned."
         ),
     )
-    contact_title: Optional[str] = Field(
+    contact_title: str | None = Field(
         None,
         description=(
             "Job title of the contact if mentioned (e.g. 'Head of Accounting', "
             "'CFO').  Return null if not stated."
         ),
     )
-    stakeholder_role: Optional[str] = Field(
+    stakeholder_role: str | None = Field(
         None,
         description=(
             "The role or function of the meeting audience.  If a specific "
@@ -98,7 +98,7 @@ class MeetingIntakeResult(BaseModel):
             "(e.g. 'finance team'), use that.  Return null if indeterminate."
         ),
     )
-    meeting_goal: Optional[str] = Field(
+    meeting_goal: str | None = Field(
         None,
         description=(
             "What the user wants to achieve in this meeting.  Summarise "
@@ -106,7 +106,7 @@ class MeetingIntakeResult(BaseModel):
             "or implied."
         ),
     )
-    meeting_type: Optional[str] = Field(
+    meeting_type: str | None = Field(
         None,
         description=(
             "One of: 'consulting_intro', 'sales_discovery', 'account_review'.  "
@@ -118,7 +118,7 @@ class MeetingIntakeResult(BaseModel):
     )
 
     # --- Engagement fields ---------------------------------------------------
-    meeting_stage: Optional[str] = Field(
+    meeting_stage: str | None = Field(
         None,
         description=(
             "One of: 'first_intro', 'discovery_followup', 'solution_discussion', "
@@ -127,7 +127,7 @@ class MeetingIntakeResult(BaseModel):
             "'kick off', 'expand', etc.  Return null if ambiguous."
         ),
     )
-    relationship_status: Optional[str] = Field(
+    relationship_status: str | None = Field(
         None,
         description=(
             "One of: 'prospect', 'active_opportunity', 'client', 'former_client'.  "
@@ -135,7 +135,7 @@ class MeetingIntakeResult(BaseModel):
             "'never met before' → prospect).  Return null if ambiguous."
         ),
     )
-    previous_meeting_outcome: Optional[str] = Field(
+    previous_meeting_outcome: str | None = Field(
         None,
         description=(
             "One of: 'positive', 'neutral', 'unclear', 'no_previous_meeting'.  "
@@ -143,7 +143,7 @@ class MeetingIntakeResult(BaseModel):
             "Return null if no prior interaction is mentioned or outcome is unclear."
         ),
     )
-    meeting_notes_summary: Optional[str] = Field(
+    meeting_notes_summary: str | None = Field(
         None,
         description=(
             "A concise 1-3 sentence summary of prior interaction context, "
@@ -154,7 +154,7 @@ class MeetingIntakeResult(BaseModel):
     )
 
     # --- User-side context ---------------------------------------------------
-    user_role: Optional[str] = Field(
+    user_role: str | None = Field(
         None,
         description=(
             "The user's own role or title (e.g. 'Account Executive', "
@@ -162,7 +162,7 @@ class MeetingIntakeResult(BaseModel):
             "Extract if explicitly stated.  Return null if not mentioned."
         ),
     )
-    user_company: Optional[str] = Field(
+    user_company: str | None = Field(
         None,
         description=(
             "The company or organisation the user is from.  "
@@ -170,7 +170,7 @@ class MeetingIntakeResult(BaseModel):
             "Return null if not mentioned."
         ),
     )
-    user_function: Optional[str] = Field(
+    user_function: str | None = Field(
         None,
         description=(
             "The user's functional area (e.g. 'sales', 'consulting', "
@@ -178,7 +178,7 @@ class MeetingIntakeResult(BaseModel):
             "or context if reasonable.  Return null if ambiguous."
         ),
     )
-    engagement_type: Optional[str] = Field(
+    engagement_type: str | None = Field(
         None,
         description=(
             "The interaction lens from the user's side.  One of: 'sales', "
@@ -188,7 +188,7 @@ class MeetingIntakeResult(BaseModel):
             "'job interview' → interview).  Return null if ambiguous."
         ),
     )
-    desired_outcome: Optional[str] = Field(
+    desired_outcome: str | None = Field(
         None,
         description=(
             "What the user wants the meeting to achieve — more specific "
@@ -197,7 +197,7 @@ class MeetingIntakeResult(BaseModel):
             "Extract or infer conservatively.  Return null if not stated."
         ),
     )
-    success_definition: Optional[str] = Field(
+    success_definition: str | None = Field(
         None,
         description=(
             "What a successful meeting would look like from the user's "
@@ -400,10 +400,10 @@ def run(raw_meeting_context: str) -> dict[str, Any]:
 
     # Sanitise enum fields against known values.
     from core.state import (
-        VALID_MEETING_TYPES,
         VALID_MEETING_STAGES,
-        VALID_RELATIONSHIP_STATUSES,
+        VALID_MEETING_TYPES,
         VALID_PREVIOUS_OUTCOMES,
+        VALID_RELATIONSHIP_STATUSES,
     )
 
     if extracted.get("meeting_type") and extracted["meeting_type"] not in VALID_MEETING_TYPES:
@@ -453,6 +453,17 @@ def run(raw_meeting_context: str) -> dict[str, Any]:
                 "reason": lc.get("reason", ""),
             })
             low_confidence_names.add(fname)
+
+    # --- A domain written verbatim in the user's text is not a guess ---------
+    # Small models sometimes flag explicitly stated values as low-confidence.
+    stated_domain = extracted.get("domain")
+    if (
+        "domain" in low_confidence_names
+        and stated_domain
+        and stated_domain.lower() in raw_meeting_context.lower()
+    ):
+        low_confidence = [lc for lc in low_confidence if lc["field"] != "domain"]
+        low_confidence_names.discard("domain")
 
     # --- Null out low-confidence domain (avoid poisoning research queries) ----
     if "domain" in low_confidence_names and extracted.get("domain"):

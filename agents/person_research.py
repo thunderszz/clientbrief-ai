@@ -19,8 +19,8 @@ Ownership:  ``person_profile`` only.
 from __future__ import annotations
 
 import logging
-from enum import Enum
-from typing import Any, Optional
+from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # Pydantic schema for the LLM's structured output
 # ---------------------------------------------------------------------------
 
-class MatchConfidence(str, Enum):
+class MatchConfidence(StrEnum):
     """How confidently we matched the contact to a real person."""
 
     high = "high"
@@ -65,20 +65,20 @@ class PersonProfile(BaseModel):
             "'low' = ambiguous, conflicting, or no useful evidence."
         )
     )
-    name: Optional[str] = Field(
+    name: str | None = Field(
         None, description="Full name as it appears in the evidence."
     )
-    title: Optional[str] = Field(
+    title: str | None = Field(
         None, description="Job title as found in the evidence."
     )
-    department: Optional[str] = Field(
+    department: str | None = Field(
         None, description="Department or function (e.g. Engineering, Finance)."
     )
-    tenure_hint: Optional[str] = Field(
+    tenure_hint: str | None = Field(
         None,
         description="Any hint about how long the person has been in the role or at the company.",
     )
-    background_summary: Optional[str] = Field(
+    background_summary: str | None = Field(
         None,
         description=(
             "1-3 sentence summary of the person's professional background "
@@ -151,7 +151,7 @@ def _collect_evidence(
     """Run Tavily queries and return (evidence_snippets, source_urls)."""
     try:
         client = TavilySearchClient()
-    except EnvironmentError as exc:
+    except OSError as exc:
         logger.warning("Tavily client init failed: %s", exc)
         return [], []
 

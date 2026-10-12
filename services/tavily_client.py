@@ -5,12 +5,18 @@ Thin wrapper around the Tavily Python SDK that:
 - exposes a single ``search()`` entry point returning structured results
 - handles errors gracefully so callers never see raw exceptions
 - keeps the interface minimal and reusable across all research agents
+- runs batches of queries concurrently
+- accepts a per-request key via ``use_tavily_key()`` ("bring your own key")
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -66,6 +72,22 @@ class SearchResponse:
 _DEFAULT_MAX_RESULTS = 5
 _DEFAULT_SEARCH_DEPTH = "basic"          # "basic" or "advanced"
 _DEFAULT_INCLUDE_RAW_CONTENT = False
+_MAX_PARALLEL_SEARCHES = 4
+
+_key_override: ContextVar[str | None] = ContextVar("tavily_key_override", default=None)
+
+
+@contextmanager
+def use_tavily_key(api_key: str | None) -> Iterator[None]:
+    """Use *api_key* for every Tavily client built in this context. ``None`` is a no-op."""
+    if not api_key:
+        yield
+        return
+    token = _key_override.set(api_key)
+    try:
+        yield
+    finally:
+        _key_override.reset(token)
 
 
 class TavilySearchClient:
@@ -80,15 +102,9 @@ class TavilySearchClient:
     """
 
     def __init__(self, api_key: str | None = None) -> None:
-        key = api_key or os.environ.get("TAVILY_API_KEY", "")
+        key = api_key or _key_override.get() or os.environ.get("TAVILY_API_KEY", "")
         if not key:
-            try:
-                import streamlit as st
-                key = st.secrets.get("TAVILY_API_KEY", "")
-            except Exception:
-                pass
-        if not key:
-            raise EnvironmentError(
+            raise OSError(
                 "TAVILY_API_KEY is not set. "
                 "Export it as an environment variable or pass it explicitly."
             )
@@ -166,17 +182,22 @@ class TavilySearchClient:
         include_answer: bool = False,
         include_raw_content: bool = _DEFAULT_INCLUDE_RAW_CONTENT,
     ) -> list[SearchResponse]:
-        """Run multiple queries sequentially and return all responses.
+        """Run multiple queries concurrently and return responses in query order.
 
         Each query is independent — a failure in one does not block the others.
         """
-        return [
-            self.search(
-                q,
+        if not queries:
+            return []
+
+        def run_one(query: str) -> SearchResponse:
+            return self.search(
+                query,
                 max_results=max_results,
                 search_depth=search_depth,
                 include_answer=include_answer,
                 include_raw_content=include_raw_content,
             )
-            for q in queries
-        ]
+
+        workers = min(_MAX_PARALLEL_SEARCHES, len(queries))
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="tavily") as pool:
+            return list(pool.map(run_one, queries))

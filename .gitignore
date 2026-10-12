@@ -2,7 +2,6 @@
 .env
 .env.*
 !.env.example
-.streamlit/secrets.toml
 
 # Cache
 .clientbrief_cache/
@@ -26,3 +25,11 @@ env/
 *.swp
 .DS_Store
 .claude/
+
+# Working files
+TASKS.md
+.superpowers/
+
+# Web
+web/node_modules/
+web/dist/

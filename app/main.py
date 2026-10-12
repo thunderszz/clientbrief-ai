@@ -24,10 +24,10 @@ Usage::
 
 from __future__ import annotations
 
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 # Load .env before anything else so API keys are available
 try:
@@ -36,21 +36,19 @@ try:
 except ImportError:
     pass  # python-dotenv optional — keys must be set manually in env
 
+from rich import box
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.rule import Rule
-from rich.spinner import Spinner
-from rich.live import Live
 from rich.table import Table
-from rich import box
-from rich.text import Text
+
+from core.pipeline import NODE_LABELS
+from core.summaries import summarize_update
 
 console = Console()
 
-# ---------------------------------------------------------------------------
-# Stage labels shown during workflow execution
 # ---------------------------------------------------------------------------
 _STAGE_LABELS: list[tuple[str, str]] = [
     ("orchestrate",        "Validating inputs"),
@@ -224,42 +222,30 @@ def _show_engagement_inference(engagement: dict) -> None:
     console.print(table)
 
 
-def _run_workflow(workflow_input: dict) -> dict:
-    """Invoke the LangGraph pipeline with live progress display."""
-    from core.workflow import app as workflow_app
+def _run_workflow(workflow_input: dict, graph: Any = None) -> dict:
+    """Run the LangGraph pipeline, printing each node as it finishes."""
+    if graph is None:
+        from core.workflow import app as graph
 
-    stages = [label for _, label in _STAGE_LABELS]
-    current_stage = [0]
-    result_holder: list[dict] = []
+    final_state: dict = {}
+    with console.status("[bold cyan]Running ClientBrief AI…[/bold cyan]"):
+        for mode, chunk in graph.stream(workflow_input, stream_mode=["updates", "values"]):
+            if mode == "values":
+                final_state = chunk
+                continue
+            for node_id, update in chunk.items():
+                label = NODE_LABELS.get(node_id, node_id)
+                summary = summarize_update(node_id, update)
+                console.print(f"  [green]✓[/green] [bold]{label}[/bold]  [dim]{summary}[/dim]")
 
-    def _invoke() -> None:
-        result = workflow_app.invoke(workflow_input)
-        result_holder.append(result)
+    console.print("[bold green]✓  Brief complete[/bold green]")
+    return final_state
 
-    import threading
 
-    thread = threading.Thread(target=_invoke, daemon=True)
-    thread.start()
-
-    with Live(console=console, refresh_per_second=4) as live:
-        idx = 0
-        while thread.is_alive():
-            label = stages[min(idx, len(stages) - 1)]
-            live.update(
-                Panel(
-                    f"[bold cyan]⏳  {label}…[/bold cyan]",
-                    border_style="cyan",
-                    title="[bold]Running ClientBrief AI[/bold]",
-                )
-            )
-            thread.join(timeout=0.8)
-            idx = min(idx + 1, len(stages) - 1)
-
-        live.update(
-            Panel("[bold green]✓  Brief complete[/bold green]", border_style="green")
-        )
-
-    return result_holder[0] if result_holder else {}
+def _reliability_line(result: dict) -> str:
+    rating = result.get("brief_reliability", 0)
+    score = (result.get("reliability_report") or {}).get("score", 0)
+    return f"Brief reliability: {rating}/5 ({score}/100)"
 
 
 def _save_brief(company_name: str, brief: str) -> Path:
@@ -409,7 +395,7 @@ def main() -> None:
     score_color = "green" if reliability >= 4 else "yellow" if reliability >= 2 else "red"
     console.print("")
     console.print(Panel(
-        f"[bold {score_color}]Brief reliability: {reliability}/5[/bold {score_color}]",
+        f"[bold {score_color}]{_reliability_line(result)}[/bold {score_color}]",
         border_style=score_color,
         expand=False,
     ))

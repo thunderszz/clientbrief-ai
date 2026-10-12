@@ -16,10 +16,9 @@ Key changes from v1:
 - ``audience_context`` can read ``engagement_context`` from shared state
   since it was written in an earlier step.
 
-Cache-aware routing
--------------------
-Not implemented yet.  Every agent handles preloaded state gracefully.
-Can be added via ``add_conditional_edges`` if profiling shows a need.
+The node ids and edges come from ``core/pipeline.py`` (shared with the API
+and UI). Every node is wrapped by ``instrument()``, which records the LLM
+calls it made (model, tier, latency, fallback) into ``state["llm_calls"]``.
 
 Usage::
 
@@ -39,22 +38,57 @@ Usage::
 
 from __future__ import annotations
 
-from langgraph.graph import StateGraph, END
+from collections.abc import Callable
+from typing import Any
 
-from core.state import BriefingState
+from langgraph.graph import END, StateGraph
+
 from agents import (
-    orchestrator,
-    research_planner,
-    company_research,
-    external_signals,
-    person_research,
     audience_context_agent,
+    brief_composer,
+    company_research,
     engagement_context_agent,
     engagement_inference_agent,
-    pain_point_agent,
+    external_signals,
     meeting_strategy_agent,
-    brief_composer,
+    orchestrator,
+    pain_point_agent,
+    person_research,
+    research_planner,
 )
+from core.pipeline import PIPELINE_EDGES, PIPELINE_NODES
+from core.state import BriefingState
+from services.llm_client import collect_llm_calls
+
+NodeFn = Callable[[dict[str, Any]], dict[str, Any]]
+
+NODE_FUNCTIONS: dict[str, NodeFn] = {
+    "orchestrate": orchestrator.run,
+    "infer_engagement": engagement_inference_agent.run,
+    "engagement_context": engagement_context_agent.run,
+    "plan": research_planner.run,
+    "research_company": company_research.run,
+    "research_signals": external_signals.run,
+    "research_person": person_research.run,
+    "audience_context": audience_context_agent.run,
+    "hypothesize": pain_point_agent.run,
+    "strategize": meeting_strategy_agent.run,
+    "compose": brief_composer.run,
+}
+
+
+def instrument(node_id: str, fn: NodeFn) -> NodeFn:
+    """Wrap a node so the LLM calls it makes are attached to its state update."""
+
+    def wrapped(state: dict[str, Any]) -> dict[str, Any]:
+        with collect_llm_calls() as calls:
+            update = fn(state)
+        if calls:
+            update = {**update, "llm_calls": [{**call, "node": node_id} for call in calls]}
+        return update
+
+    wrapped.__name__ = f"{node_id}_instrumented"
+    return wrapped
 
 
 def build_graph() -> StateGraph:
@@ -62,53 +96,19 @@ def build_graph() -> StateGraph:
 
     Returns the un-compiled ``StateGraph`` so callers can inspect or
     extend it before compiling.
+
+    Fan-out from ``plan`` to the three research nodes runs them in parallel;
+    ``audience_context`` waits for all three (fan-in).
     """
     graph = StateGraph(BriefingState)
 
-    # --- Register nodes (11 total) --------------------------------------------
-    graph.add_node("orchestrate", orchestrator.run)
-    graph.add_node("infer_engagement", engagement_inference_agent.run)
-    graph.add_node("engagement_context", engagement_context_agent.run)
-    graph.add_node("plan", research_planner.run)
-    graph.add_node("research_company", company_research.run)
-    graph.add_node("research_signals", external_signals.run)
-    graph.add_node("research_person", person_research.run)
-    graph.add_node("audience_context", audience_context_agent.run)
-    graph.add_node("hypothesize", pain_point_agent.run)
-    graph.add_node("strategize", meeting_strategy_agent.run)
-    graph.add_node("compose", brief_composer.run)
+    for node in PIPELINE_NODES:
+        graph.add_node(node["id"], instrument(node["id"], NODE_FUNCTIONS[node["id"]]))
 
-    # --- Entry point ----------------------------------------------------------
-    graph.set_entry_point("orchestrate")
-
-    # --- Engagement-first chain (before planning) -----------------------------
-    # Engagement inference + context resolve before planning so the planner
-    # can use research_mode and engagement_context to calibrate depth.
-    graph.add_edge("orchestrate", "infer_engagement")
-    graph.add_edge("infer_engagement", "engagement_context")
-    graph.add_edge("engagement_context", "plan")
-
-    # --- Plan → three research agents (fan-out) -------------------------------
-    # LangGraph executes nodes with all inbound edges satisfied.
-    # Adding three edges from "plan" to distinct nodes triggers parallel
-    # execution when the graph is compiled with the default executor.
-    graph.add_edge("plan", "research_company")
-    graph.add_edge("plan", "research_signals")
-    graph.add_edge("plan", "research_person")
-
-    # --- Three research agents → audience_context (fan-in) --------------------
-    # audience_context starts only after all three research nodes complete.
-    graph.add_edge("research_company", "audience_context")
-    graph.add_edge("research_signals", "audience_context")
-    graph.add_edge("research_person", "audience_context")
-
-    # --- Sequential reasoning chain -------------------------------------------
-    graph.add_edge("audience_context", "hypothesize")
-    graph.add_edge("hypothesize", "strategize")
-    graph.add_edge("strategize", "compose")
-
-    # --- Compose → END --------------------------------------------------------
-    graph.add_edge("compose", END)
+    graph.set_entry_point(PIPELINE_NODES[0]["id"])
+    for source, target in PIPELINE_EDGES:
+        graph.add_edge(source, target)
+    graph.add_edge(PIPELINE_NODES[-1]["id"], END)
 
     return graph
 

@@ -12,7 +12,7 @@ import hashlib
 import json
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 # Fields that are NOT cached (they are recomposed each run).
 _EXCLUDED_FIELDS: frozenset[str] = frozenset({"final_brief"})
@@ -54,7 +54,7 @@ def cache_read(
     meeting_type: str,
     normalized_function: str,
     stakeholder_role: str,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Load a cached state dict if it exists and is within TTL.
 
     Returns ``None`` on miss (file absent, expired, or corrupt).

@@ -14,20 +14,19 @@ The system should:
 - generate meeting strategy and questions
 - compose a final markdown brief
 
-## Recommended MVP stack
-Use this stack for the first implementation:
-- **LLM provider:** Google Gemini API (`google-genai` SDK)
-- **Initial model:** Gemini 3.1 Flash Lite Preview (`gemini-3.1-flash-lite-preview`)
-- **Search provider:** Tavily
-- **Workflow orchestration:** LangGraph
-- **UI later:** Streamlit
+## Stack (v2)
+- **LLM:** provider-agnostic client in `services/llm_client.py`. Default Google Gemini
+  (`google-genai`), two tiers: `LLM_MODEL_FAST` (default `gemini-3.5-flash-lite`) for
+  extraction, `LLM_MODEL_REASONING` (default `gemini-3.6-flash`) for audience, pain points
+  and strategy. Any OpenAI-compatible provider works via `LLM_PROVIDER=openai_compatible`.
+- **Search provider:** Tavily (`services/tavily_client.py`)
+- **Workflow orchestration:** LangGraph (`core/workflow.py`, shape in `core/pipeline.py`)
+- **API:** FastAPI with SSE streaming (`api/`)
+- **UI:** React + Vite + TypeScript + Tailwind (`web/`), served by FastAPI from `web/dist`
+- **CLI:** `python -m app.main`
 
-Do **not** start with self-hosted open-source models unless there is a hard requirement to avoid commercial APIs.
-Prioritize reliability, structured outputs, and speed of iteration.
-
-If higher-quality reasoning is needed later, test **Claude Sonnet 4.6** only on:
-- `pain_point_agent.py`
-- `meeting_strategy_agent.py`
+Tests: `pytest` (offline, no keys) and `cd web && npm test`.
+Design decisions and the v2 plan: `docs/specs/2026-10-12-showcase-v2-design.md`.
 
 ## Core architecture
 The system has two layers:

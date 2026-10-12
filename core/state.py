@@ -10,8 +10,7 @@ step (``errors``, ``sources``, ``external_signals``) use ``Annotated`` with
 """
 
 import operator
-from typing import Annotated, TypedDict, Optional
-
+from typing import Annotated, TypedDict
 
 # --- Canonical enumerations ---------------------------------------------------
 
@@ -98,10 +97,10 @@ class BriefingState(TypedDict):
     """
 
     # Pre-intake (optional — populated only when intake agent was used)
-    raw_meeting_context: Optional[str]
+    raw_meeting_context: str | None
     intake_missing_fields: list
     intake_low_confidence_fields: list
-    intake_confirmation_summary: Optional[str]
+    intake_confirmation_summary: str | None
 
     # User inputs
     company_name: str
@@ -109,26 +108,26 @@ class BriefingState(TypedDict):
     meeting_type: str
     stakeholder_role: str
     meeting_goal: str
-    contact_name: Optional[str]
-    contact_title: Optional[str]
+    contact_name: str | None
+    contact_title: str | None
 
     # Engagement inputs (optional — None means "not provided by user")
-    meeting_stage: Optional[str]
-    previous_meeting_outcome: Optional[str]
-    relationship_status: Optional[str]
-    meeting_notes_summary: Optional[str]
+    meeting_stage: str | None
+    previous_meeting_outcome: str | None
+    relationship_status: str | None
+    meeting_notes_summary: str | None
 
     # User-side context (optional — extracted by intake or provided directly)
-    user_role: Optional[str]
-    user_company: Optional[str]
-    user_function: Optional[str]
-    engagement_type: Optional[str]
-    desired_outcome: Optional[str]
-    success_definition: Optional[str]
+    user_role: str | None
+    user_company: str | None
+    user_function: str | None
+    engagement_type: str | None
+    desired_outcome: str | None
+    success_definition: str | None
 
     # Deterministic derived fields (orchestrator)
     normalized_function: str
-    normalized_seniority: Optional[str]
+    normalized_seniority: str | None
 
     # Engagement inference (LLM-inferred gap-fill for missing engagement inputs)
     engagement_inference: dict
@@ -147,5 +146,7 @@ class BriefingState(TypedDict):
     # Metadata
     sources: Annotated[list, operator.add]
     brief_reliability: int
+    reliability_report: dict
     cache_hit: bool
     errors: Annotated[list, operator.add]
+    llm_calls: Annotated[list, operator.add]  # one record per LLM call, tagged with node

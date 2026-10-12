@@ -23,13 +23,12 @@ Ownership:  ``meeting_strategy`` only.
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from services.llm_client import structured_extract
+from services.llm_client import Tier, structured_extract
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +314,7 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=user_prompt,
         response_model=MeetingStrategy,
+        tier=Tier.REASONING,
     )
 
     if result is None:
