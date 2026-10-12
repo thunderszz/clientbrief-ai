@@ -7,7 +7,7 @@ overrides, runs the full pipeline and saves every UI event to
 Usage::
 
     python -m scripts.record_demo --slug bending-spoons --order 1 \\
-        --title "Bending Spoons · first intro" --subtitle "Head of Finance" \\
+        --title "Bending Spoons" --subtitle "First intro with the Head of Finance" \\
         --text "First intro call with the Head of Finance at Bending Spoons..."
 
     # fix an intake mistake or add a field:

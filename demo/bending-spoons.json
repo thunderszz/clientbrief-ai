@@ -1,8 +1,8 @@
 {
  "slug": "bending-spoons",
  "order": 1,
- "title": "Bending Spoons · first intro",
- "subtitle": "Consultant meets the Head of Finance",
+ "title": "Bending Spoons",
+ "subtitle": "First intro with the Head of Finance, as an AI consultant",
  "company": "Bending Spoons",
  "input_text": "First intro call next Thursday with the Head of Finance at Bending Spoons (bendingspoons.com). I'm a consultant at a small AI advisory firm; we help companies automate finance operations with AI. Goal: understand how they handle finance ops after their many acquisitions and see if there's room for a pilot.",
  "intake": {
