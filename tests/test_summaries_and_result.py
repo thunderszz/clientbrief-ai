@@ -32,7 +32,23 @@ from core.summaries import summarize_update
         (
             "infer_engagement",
             {"engagement_inference": {"confidence": "high", "inferred_meeting_stage": "discovery_followup"}},
-            "inferred stage: discovery_followup (high confidence)",
+            "inferred stage discovery_followup (high confidence)",
+        ),
+        (
+            "infer_engagement",
+            {
+                "engagement_inference": {
+                    "confidence": "high",
+                    "inferred_relationship_status": "client",
+                    "inferred_previous_meeting_outcome": "positive",
+                }
+            },
+            "inferred relationship client, previous outcome positive (high confidence)",
+        ),
+        (
+            "infer_engagement",
+            {"engagement_inference": {"confidence": "low"}},
+            "nothing inferred (low confidence)",
         ),
         (
             "engagement_context",

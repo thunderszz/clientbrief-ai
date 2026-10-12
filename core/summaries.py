@@ -27,8 +27,17 @@ def _infer_engagement(u: Mapping[str, Any]) -> str:
     confidence = ei.get("confidence")
     if confidence == "not_needed":
         return "not needed: all engagement fields were given"
-    stage = ei.get("inferred_meeting_stage") or "unknown"
-    return f"inferred stage: {stage} ({confidence or 'low'} confidence)"
+    inferred = [
+        f"{label} {ei[key]}"
+        for key, label in (
+            ("inferred_meeting_stage", "stage"),
+            ("inferred_relationship_status", "relationship"),
+            ("inferred_previous_meeting_outcome", "previous outcome"),
+        )
+        if ei.get(key)
+    ]
+    what = f"inferred {', '.join(inferred)}" if inferred else "nothing inferred"
+    return f"{what} ({confidence or 'low'} confidence)"
 
 
 def _engagement_context(u: Mapping[str, Any]) -> str:

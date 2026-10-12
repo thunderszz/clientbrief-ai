@@ -137,11 +137,16 @@ in a breakdown popover:
 
 | component | what it measures | weight |
 |---|---|---|
-| Source coverage | number of distinct source URLs | 25 |
-| Source diversity | distinct domains, bonus for the company's own domain | 20 |
-| Strategic signals | count of signals, weighted by their confidence | 25 |
-| Contact match | person match confidence (none/low/medium/high) | 15 |
-| Pipeline health | penalty per agent error / empty LLM response | 15 |
+| Source coverage | distinct source URLs (saturates at 20) | 15 |
+| Source diversity | independent sites (saturates at 12), +5 for the company's own site | 20 |
+| Strategic signals | signals weighted by confidence (saturates at 6) | 20 |
+| Freshness | share of signals dated within the last 12 months (undated count ¼) | 15 |
+| Contact match | person match confidence (none/low/medium/high), only when a contact is named | 15 |
+| Pipeline health | −5 per agent warning, −2 per model fallback | 15 |
+
+Calibrated after the first real runs: with the original caps every demo scored 100/100,
+which reads as a fake metric. A solid brief now lands in the 80s; 100 needs fresh news,
+a confirmed contact and a clean run.
 
 `brief_reliability` (1–5) is still written for the markdown header, derived from the
 0–100 score, so the CLI and markdown output keep working.

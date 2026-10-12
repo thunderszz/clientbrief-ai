@@ -4,13 +4,17 @@ The score (0-100) is the sum of named components, each with a cap and a
 human-readable detail line, so the UI can show *why* a brief scored what it
 did. The 1-5 ``rating`` derived from it feeds the markdown header and CLI.
 
-| component  | measures                                              | max |
-|------------|-------------------------------------------------------|-----|
-| sources    | distinct source URLs (saturates at 12)                 |  25 |
-| diversity  | independent sites (saturates at 8) + company's own site |  20 |
-| signals    | strategic signals weighted by confidence (sat. at 5)   |  25 |
-| contact    | person match confidence (only if a contact was named)  |  15 |
-| health     | minus 5 per agent warning                              |  15 |
+| component  | measures                                                  | max |
+|------------|-----------------------------------------------------------|-----|
+| sources    | distinct source URLs (saturates at 20)                     |  15 |
+| diversity  | independent sites (saturates at 12) + company's own site   |  20 |
+| signals    | strategic signals weighted by confidence (saturates at 6)  |  20 |
+| freshness  | share of signals dated within the last 12 months           |  15 |
+| contact    | person match confidence (only if a contact was named)      |  15 |
+| health     | minus 5 per agent warning, minus 2 per model fallback      |  15 |
+
+The caps are set so that a solid brief lands in the 70s-80s and 100 means
+exceptional coverage, fresh news, a confirmed contact and a clean run.
 
 A component that does not apply (no contact named) is left out of the
 denominator, so a brief is never penalised for information the user did not
@@ -19,15 +23,19 @@ ask for.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
+from datetime import UTC, date, datetime
 from typing import Any
 from urllib.parse import urlparse
 
-_SOURCES_MAX, _SOURCES_SATURATION = 25, 12
-_DIVERSITY_MAX, _DIVERSITY_SITES_POINTS, _DIVERSITY_SATURATION, _OWN_SITE_BONUS = 20, 15, 8, 5
-_SIGNALS_MAX, _SIGNALS_SATURATION = 25, 5.0
+_SOURCES_MAX, _SOURCES_SATURATION = 15, 20
+_DIVERSITY_MAX, _DIVERSITY_SITES_POINTS, _DIVERSITY_SATURATION, _OWN_SITE_BONUS = 20, 15, 12, 5
+_SIGNALS_MAX, _SIGNALS_SATURATION = 20, 6.0
+_FRESHNESS_MAX, _FRESH_MONTHS, _UNDATED_CREDIT = 15, 12, 0.25
 _CONTACT_MAX = 15
-_HEALTH_MAX, _HEALTH_PENALTY = 15, 5
+_HEALTH_MAX, _WARNING_PENALTY, _FALLBACK_PENALTY = 15, 5, 2
+_YEAR_MONTH = re.compile(r"^(\d{4})-(\d{2})")
 
 _SIGNAL_WEIGHTS = {"high": 1.0, "medium": 0.7, "low": 0.4}
 _CONTACT_POINTS = {"high": 15, "medium": 10, "low": 3}
@@ -95,8 +103,17 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}" if n == 1 else f"{n} {word}s"
 
 
-def compute_reliability_report(state: Mapping[str, Any]) -> dict[str, Any]:
+def _months_old(raw: Any, today: date) -> int | None:
+    match = _YEAR_MONTH.match(str(raw or ""))
+    if not match:
+        return None
+    year, month = int(match.group(1)), int(match.group(2))
+    return (today.year - year) * 12 + (today.month - month)
+
+
+def compute_reliability_report(state: Mapping[str, Any], today: date | None = None) -> dict[str, Any]:
     """Score how well-grounded a brief is. See the module docstring for the components."""
+    today = today or datetime.now(UTC).date()
     sources = aggregate_sources(state)
     signals = state.get("external_signals") or []
     errors = state.get("errors") or []
@@ -145,6 +162,18 @@ def compute_reliability_report(state: Mapping[str, Any]) -> dict[str, Any]:
         signals_detail,
     )
 
+    # --- freshness ----------------------------------------------------------------
+    ages = [_months_old(signal.get("date"), today) for signal in signals]
+    recent = sum(1 for age in ages if age is not None and age <= _FRESH_MONTHS)
+    undated = sum(1 for age in ages if age is None)
+    if signals:
+        freshness_points = _FRESHNESS_MAX * (recent + _UNDATED_CREDIT * undated) / len(signals)
+        freshness_detail = f"{recent} of {len(signals)} signals from the last {_FRESH_MONTHS} months"
+        freshness_detail += f", {undated} undated" if undated else ""
+    else:
+        freshness_points, freshness_detail = 0, "no signals to date"
+    freshness_c = _component("freshness", "Freshness", freshness_points, _FRESHNESS_MAX, freshness_detail)
+
     # --- contact ----------------------------------------------------------------
     if state.get("contact_name"):
         confidence = str((state.get("person_profile") or {}).get("match_confidence") or "none")
@@ -161,15 +190,22 @@ def compute_reliability_report(state: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     # --- health -------------------------------------------------------------------
+    # Failed LLM calls are not counted here: agents already report them as warnings.
+    fallbacks = sum(1 for call in state.get("llm_calls") or [] if call.get("fallback"))
+    health_parts = []
+    if errors:
+        health_parts.append(_plural(len(errors), "agent warning"))
+    if fallbacks:
+        health_parts.append(_plural(fallbacks, "model fallback"))
     health_c = _component(
         "health",
         "Pipeline health",
-        max(0, _HEALTH_MAX - _HEALTH_PENALTY * len(errors)),
+        max(0, _HEALTH_MAX - _WARNING_PENALTY * len(errors) - _FALLBACK_PENALTY * fallbacks),
         _HEALTH_MAX,
-        _plural(len(errors), "agent warning") if errors else "no agent warnings",
+        ", ".join(health_parts) or "no agent warnings",
     )
 
-    components = [sources_c, diversity_c, signals_c, contact_c, health_c]
+    components = [sources_c, diversity_c, signals_c, freshness_c, contact_c, health_c]
 
     if not sources and not signals:
         score = 0  # nothing was found, so there is nothing to be reliable about
