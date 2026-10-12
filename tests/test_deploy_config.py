@@ -31,10 +31,18 @@ def test_vercel_entrypoint_is_the_fastapi_app():
     assert type(app).__name__ == "FastAPI"
 
 
-def test_vercel_function_config_targets_the_entrypoint():
-    entry = _pyproject()["tool"]["vercel"]["entrypoint"].partition(":")[0].replace(".", "/") + ".py"
+def test_vercel_services_route_everything_to_the_fastapi_app():
+    entrypoint = _pyproject()["tool"]["vercel"]["entrypoint"]
     config = json.loads((ROOT / "vercel.json").read_text())
 
-    assert entry in config["functions"]
-    assert config["functions"][entry]["maxDuration"] >= 180
-    assert "web" in config["buildCommand"]
+    assert list(config["services"]) == ["app"]
+    app = config["services"]["app"]
+    assert app["root"] == "."
+    assert app["framework"] == "fastapi"
+    assert app["entrypoint"] == entrypoint
+    assert "web" in app["buildCommand"]
+    function_file = entrypoint.partition(":")[0].replace(".", "/") + ".py"
+    assert app["functions"][function_file]["maxDuration"] >= 180
+    assert config["rewrites"] == [{"source": "/(.*)", "destination": {"service": "app"}}]
+    # In services mode build and runtime keys are invalid at the top level.
+    assert not {"functions", "buildCommand", "framework"} & set(config)
