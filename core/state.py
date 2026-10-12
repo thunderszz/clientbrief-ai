@@ -149,3 +149,4 @@ class BriefingState(TypedDict):
     reliability_report: dict
     cache_hit: bool
     errors: Annotated[list, operator.add]
+    llm_calls: Annotated[list, operator.add]  # one record per LLM call, tagged with node
