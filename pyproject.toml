@@ -3,6 +3,21 @@ name = "clientbrief-ai"
 version = "2.0.0"
 description = "Multi-agent pre-meeting intelligence: LangGraph pipeline, FastAPI streaming API, React UI."
 requires-python = ">=3.11"
+# Keep in sync with requirements.txt (tests/test_deploy_config.py checks it).
+dependencies = [
+    "langgraph==1.2.14",
+    "google-genai==2.29.0",
+    "openai==3.29.0",
+    "tavily-python==0.8.5",
+    "pydantic==2.14.1",
+    "python-dotenv==1.2.4",
+    "rich==15.0.0",
+    "fastapi==0.143.0",
+    "uvicorn[standard]==0.54.0",
+]
+
+[tool.vercel]
+entrypoint = "api.main:app"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

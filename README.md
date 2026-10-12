@@ -113,6 +113,13 @@ docker build -t clientbrief-ai .
 docker run -p 8000:8000 --env-file .env clientbrief-ai
 ```
 
+### Deploy on Vercel
+
+The repo is ready for Vercel's FastAPI preset: `pyproject.toml` points it at `api.main:app`,
+and `vercel.json` builds the web app and lets a run stream for up to five minutes. Import the
+repo in Vercel, add the environment variables below and deploy. The daily cap is kept in
+memory per instance, so treat it as a soft limit.
+
 ### Configuration
 
 | Variable | Default | What it does |
