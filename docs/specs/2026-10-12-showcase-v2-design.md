@@ -1,6 +1,6 @@
 # ClientBrief AI v2: showcase redesign
 
-Status: draft for review · 2026-10-12
+Status: approved 2026-10-12 (Gemini default, model routing added after review)
 
 ## Why
 
@@ -32,11 +32,36 @@ Two readers, both of whom need to be convinced:
 
 - Frontend: **FastAPI + React, one deploy.** FastAPI serves the API and the built UI.
 - Audience: both of the above.
-- LLM provider: **must work on a free tier.** The Gemini key in `.env` still works
-  (tested 2026-10-12 on `gemini-3.1-flash-lite`), and Gemini Flash/Flash-Lite still
-  have a free tier. So Gemini stays the default, and the client is made provider-agnostic
-  so that any OpenAI-compatible endpoint works by changing env vars: Groq (free tier),
-  DeepSeek (cheap, not free), OpenRouter, or local Ollama.
+- LLM provider: **Gemini stays the default, and it must keep working on a free tier.**
+  The client is made provider-agnostic so any OpenAI-compatible endpoint works by
+  changing env vars: Groq (free tier), DeepSeek (cheap, not free), OpenRouter, or local
+  Ollama.
+- **Hard date: 2026-11-15.** Francesco expects to lose free Gemini API access that day.
+  The replay demos must be recorded with the real pipeline before then, and the public
+  demo must not depend on a live key.
+
+### Model routing
+
+Benchmarked on 2026-10-12 with the project key, using a structured-output call:
+
+| model | result |
+|---|---|
+| `gemini-3.8-flash` | works, 7.5 s, thinking model |
+| `gemini-3.5-flash-lite` | works, 1.1 s |
+| `gemini-3.1-flash-lite` (current default) | works, 20.6 s |
+| `gemini-3.5-flash` | 503, overloaded at test time |
+| `gemini-3.1-pro-preview`, `gemini-pro-latest` | 429, no quota on this key |
+
+The agents are split into two tiers, each set by its own env var:
+
+- `LLM_MODEL_REASONING` (default `gemini-3.8-flash`): `audience_context_agent`,
+  `pain_point_agent`, `meeting_strategy_agent`.
+- `LLM_MODEL_FAST` (default `gemini-3.5-flash-lite`): intake, engagement inference,
+  company/signals/person extraction.
+
+On 429/503 a call retries with backoff, then falls back to the other tier's model, so a
+busy model degrades the brief instead of failing it. The model actually used per node is
+reported in the `node_finished` event and shown in the UI.
 
 ## Architecture
 
@@ -89,8 +114,8 @@ shape; this is just exposing what's already in the state.
 
 `structured_extract()` keeps its signature. Behind it:
 
-- `LLM_PROVIDER=gemini` (default): the existing google-genai path with native JSON schema.
-  The default model changes to the GA `gemini-3.1-flash-lite`.
+- `LLM_PROVIDER=gemini` (default): the existing google-genai path with native JSON schema,
+  with per-agent tier selection as described in "Model routing".
 - `LLM_PROVIDER=openai_compatible` + `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL`: uses the
   `openai` SDK with JSON mode, puts the Pydantic JSON schema in the system prompt,
   validates with Pydantic, and on a validation error does one repair retry that sends
