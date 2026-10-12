@@ -14,7 +14,7 @@ Ownership:  ``external_signals`` only.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -63,7 +63,7 @@ class Signal(BaseModel):
     source: str = Field(
         description="URL of the primary source for this signal."
     )
-    date: Optional[str] = Field(
+    date: str | None = Field(
         None,
         description=(
             "When the event occurred or was announced, if mentioned. "
@@ -121,7 +121,7 @@ def _collect_evidence(
     """Run Tavily queries and return (evidence_snippets, source_urls)."""
     try:
         client = TavilySearchClient()
-    except EnvironmentError as exc:
+    except OSError as exc:
         logger.warning("Tavily client init failed: %s", exc)
         return [], []
 

@@ -15,11 +15,9 @@ Usage::
 
 from __future__ import annotations
 
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 # Ensure project root is importable
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent

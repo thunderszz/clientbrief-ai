@@ -9,16 +9,12 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Optional
 from urllib.parse import urlparse
 
 from core.state import (
-    VALID_FUNCTIONS,
-    VALID_MEETING_TYPES,
     VALID_MEETING_STAGES,
-    SENIORITY_LEVELS,
+    VALID_MEETING_TYPES,
 )
-
 
 # =============================================================================
 # Domain / URL normalization
@@ -171,7 +167,7 @@ def normalize_function(role: str) -> str:
     return "general"
 
 
-def normalize_seniority(role: str) -> Optional[str]:
+def normalize_seniority(role: str) -> str | None:
     """Infer seniority level from a free-text role/title.
 
     Returns a canonical seniority string, or ``None`` if indeterminate.

@@ -24,7 +24,6 @@ Usage::
 
 from __future__ import annotations
 
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -36,16 +35,14 @@ try:
 except ImportError:
     pass  # python-dotenv optional — keys must be set manually in env
 
+from rich import box
 from rich.console import Console
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.rule import Rule
-from rich.spinner import Spinner
-from rich.live import Live
 from rich.table import Table
-from rich import box
-from rich.text import Text
 
 console = Console()
 

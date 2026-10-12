@@ -16,11 +16,10 @@ Ownership:  ``final_brief``, ``brief_reliability``, ``reliability_report``, ``so
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from core.reliability import aggregate_sources, compute_reliability_report
-
 
 # Confidence values that permit displaying person-level detail.
 _RELIABLE_CONFIDENCE = frozenset({"medium", "high"})
@@ -56,7 +55,7 @@ def _build_header(state: dict[str, Any], report: dict[str, Any]) -> str:
     ec = state.get("engagement_context", {})
     meeting_stage = state.get("meeting_stage") or ec.get("interaction_stage") or "first_intro"
     stakeholder = state.get("stakeholder_role", "")
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     type_label = _MEETING_TYPE_LABELS.get(meeting_type, meeting_type)
     stage_label = _STAGE_LABELS.get(meeting_stage, meeting_stage)

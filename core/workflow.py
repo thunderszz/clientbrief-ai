@@ -39,22 +39,22 @@ Usage::
 
 from __future__ import annotations
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from core.state import BriefingState
 from agents import (
-    orchestrator,
-    research_planner,
-    company_research,
-    external_signals,
-    person_research,
     audience_context_agent,
+    brief_composer,
+    company_research,
     engagement_context_agent,
     engagement_inference_agent,
-    pain_point_agent,
+    external_signals,
     meeting_strategy_agent,
-    brief_composer,
+    orchestrator,
+    pain_point_agent,
+    person_research,
+    research_planner,
 )
+from core.state import BriefingState
 
 
 def build_graph() -> StateGraph:

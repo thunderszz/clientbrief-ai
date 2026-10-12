@@ -25,7 +25,6 @@ from core.utils import (
     validate_inputs,
 )
 
-
 # ---------------------------------------------------------------------------
 # Defaults for agent-output fields the orchestrator does not own.
 # These provide safe starting values so downstream nodes always see

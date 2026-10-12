@@ -23,7 +23,7 @@ Ownership:  ``engagement_inference`` only.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -44,7 +44,7 @@ class EngagementInference(BaseModel):
     leave the field as null rather than guessing.
     """
 
-    inferred_meeting_stage: Optional[str] = Field(
+    inferred_meeting_stage: str | None = Field(
         None,
         description=(
             "Inferred meeting stage.  Must be one of: first_intro, "
@@ -53,7 +53,7 @@ class EngagementInference(BaseModel):
             "Return null if no meaningful signal exists."
         ),
     )
-    inferred_relationship_status: Optional[str] = Field(
+    inferred_relationship_status: str | None = Field(
         None,
         description=(
             "Inferred relationship status.  Must be one of: prospect, "
@@ -61,7 +61,7 @@ class EngagementInference(BaseModel):
             "Return null if no meaningful signal exists."
         ),
     )
-    inferred_previous_meeting_outcome: Optional[str] = Field(
+    inferred_previous_meeting_outcome: str | None = Field(
         None,
         description=(
             "Inferred outcome of any previous interaction.  Must be one of: "
@@ -248,8 +248,8 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
     # If the LLM returned something unexpected, null it out.
     from core.state import (
         VALID_MEETING_STAGES,
-        VALID_RELATIONSHIP_STATUSES,
         VALID_PREVIOUS_OUTCOMES,
+        VALID_RELATIONSHIP_STATUSES,
     )
 
     if inference.get("inferred_meeting_stage") and \
