@@ -15,13 +15,12 @@ Ownership:  ``audience_context`` only.
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from services.llm_client import structured_extract
+from services.llm_client import Tier, structured_extract
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ class AudienceContext(BaseModel):
     department: str = Field(
         description="The business function or department (e.g. 'Finance', 'Engineering')."
     )
-    role_seniority: Optional[str] = Field(
+    role_seniority: str | None = Field(
         None,
         description="Seniority level (e.g. 'C-level', 'VP', 'Director', 'Manager').  Null if unknown.",
     )
@@ -202,6 +201,7 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=user_prompt,
         response_model=AudienceContext,
+        tier=Tier.REASONING,
     )
 
     if result is None:

@@ -46,7 +46,9 @@ Benchmarked on 2026-10-12 with the project key, using a structured-output call:
 
 | model | result |
 |---|---|
-| `gemini-3.8-flash` | works, 7.5 s, thinking model |
+| `gemini-3.8-flash` | 7.5 s at first, then 85 s queues and 503s on re-test |
+| `gemini-3.6-flash` | works, ~3 s on repeated calls, thinking model |
+| `gemini-3.7-flash` | 503 on re-test |
 | `gemini-3.5-flash-lite` | works, 1.1 s |
 | `gemini-3.1-flash-lite` (current default) | works, 20.6 s |
 | `gemini-3.5-flash` | 503, overloaded at test time |
@@ -54,12 +56,12 @@ Benchmarked on 2026-10-12 with the project key, using a structured-output call:
 
 The agents are split into two tiers, each set by its own env var:
 
-- `LLM_MODEL_REASONING` (default `gemini-3.8-flash`): `audience_context_agent`,
+- `LLM_MODEL_REASONING` (default `gemini-3.6-flash`; 3.8 is the newest but is overloaded on the free tier): `audience_context_agent`,
   `pain_point_agent`, `meeting_strategy_agent`.
 - `LLM_MODEL_FAST` (default `gemini-3.5-flash-lite`): intake, engagement inference,
   company/signals/person extraction.
 
-On 429/503 a call retries with backoff, then falls back to the other tier's model, so a
+Every call has a 45 s timeout. On 429/503/timeout a call retries with backoff, then falls back to the other tier's model, so a
 busy model degrades the brief instead of failing it. The model actually used per node is
 reported in the `node_finished` event and shown in the UI.
 
