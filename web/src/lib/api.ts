@@ -2,6 +2,7 @@ import { readEventStream } from "./sse";
 import type { RequestCredentials } from "./settings";
 import type {
   AppConfig,
+  BriefResult,
   DemoDetail,
   DemoSummary,
   IntakeResponse,
@@ -50,6 +51,7 @@ export const api = {
   config: () => getJson<AppConfig>("/api/config"),
   demos: () => getJson<DemoSummary[]>("/api/demos"),
   demo: (slug: string) => getJson<DemoDetail>(`/api/demos/${encodeURIComponent(slug)}/detail`),
+  demoResult: (slug: string) => getJson<BriefResult>(`/api/demos/${encodeURIComponent(slug)}/result`),
   intake: (text: string, credentials?: RequestCredentials) =>
     postJson<IntakeResponse>("/api/intake", { text, credentials }),
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  demoSlugFromHash,
+  demoLinkFromHash,
   formatDuration,
   formatSignalDate,
   groupSourcesBySite,
@@ -90,10 +90,18 @@ describe("splitObjection", () => {
   });
 });
 
-describe("demoSlugFromHash", () => {
-  it("reads #demo=slug links", () => {
-    expect(demoSlugFromHash("#demo=satispay")).toBe("satispay");
-    expect(demoSlugFromHash("#demo=Bad Slug")).toBeNull();
-    expect(demoSlugFromHash("")).toBeNull();
+describe("demoLinkFromHash", () => {
+  it("reads #demo=slug links as replays", () => {
+    expect(demoLinkFromHash("#demo=satispay")).toEqual({ slug: "satispay", view: "replay" });
+  });
+
+  it("reads #brief=slug links as finished briefs", () => {
+    expect(demoLinkFromHash("#brief=moneyfarm")).toEqual({ slug: "moneyfarm", view: "brief" });
+  });
+
+  it("rejects anything else", () => {
+    expect(demoLinkFromHash("#demo=Bad Slug")).toBeNull();
+    expect(demoLinkFromHash("#other=x")).toBeNull();
+    expect(demoLinkFromHash("")).toBeNull();
   });
 });

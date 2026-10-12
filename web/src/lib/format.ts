@@ -83,7 +83,14 @@ export function splitObjection(text: string): { objection: string; response: str
   return { objection, response: rest.join(" ").trim() };
 }
 
-export function demoSlugFromHash(hash: string): string | null {
-  const match = /^#demo=([a-z0-9][a-z0-9-]{0,60})$/.exec(hash);
-  return match ? match[1] : null;
+export interface DemoLink {
+  slug: string;
+  view: "replay" | "brief";
+}
+
+/** Shareable links: #demo=<slug> replays a recorded run, #brief=<slug> opens its brief. */
+export function demoLinkFromHash(hash: string): DemoLink | null {
+  const match = /^#(demo|brief)=([a-z0-9][a-z0-9-]{0,60})$/.exec(hash);
+  if (!match) return null;
+  return { slug: match[2], view: match[1] === "demo" ? "replay" : "brief" };
 }

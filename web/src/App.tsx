@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "./components/Header";
 import { SettingsDrawer } from "./components/SettingsDrawer";
 import { api, errorMessage } from "./lib/api";
-import { demoSlugFromHash, labelFor } from "./lib/format";
+import { demoLinkFromHash, labelFor } from "./lib/format";
 import {
   clearCredentials,
   loadCredentials,
@@ -30,6 +30,11 @@ function setHash(hash: string) {
   } catch {
     // History API unavailable (sandboxed preview): links just won't update.
   }
+}
+
+function recordedOrigin(demo: DemoSummary): string {
+  const date = new Date(demo.recorded_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  return `Recorded run from ${date}`;
 }
 
 export default function App() {
@@ -80,13 +85,21 @@ export default function App() {
     [run],
   );
 
-  // Shareable links: #demo=<slug> starts that recorded run.
+  // Shareable links: #demo=<slug> replays a recorded run, #brief=<slug> opens its brief.
   useEffect(() => {
     if (deepLinkHandled.current || !config || demos.length === 0) return;
     deepLinkHandled.current = true;
-    const slug = demoSlugFromHash(window.location.hash);
-    const demo = demos.find((d) => d.slug === slug);
-    if (demo) watchDemo(demo);
+    const link = demoLinkFromHash(window.location.hash);
+    const demo = demos.find((d) => d.slug === link?.slug);
+    if (!link || !demo) return;
+    if (link.view === "replay") {
+      watchDemo(demo);
+      return;
+    }
+    api
+      .demoResult(demo.slug)
+      .then((result) => setView({ name: "brief", result, origin: recordedOrigin(demo) }))
+      .catch((e) => setLoadError(errorMessage(e)));
   }, [config, demos, watchDemo]);
 
   function goHome() {
@@ -125,9 +138,7 @@ export default function App() {
 
   const openBrief = useCallback(() => {
     if (view.name !== "run" || !run.state.result) return;
-    const origin = view.demo
-      ? `Recorded run from ${new Date(view.demo.recorded_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`
-      : "Live run";
+    const origin = view.demo ? recordedOrigin(view.demo) : "Live run";
     setView({ name: "brief", result: run.state.result, origin });
   }, [view, run.state.result]);
 
