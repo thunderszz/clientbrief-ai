@@ -369,12 +369,3 @@ def normalize_date(raw: str | None) -> str | None:
     # normalise to YYYY-MM — fabricating a month would be semantically
     # incorrect.  Return None and let the caller decide how to handle it.
     return None
-
-
-# =============================================================================
-# Reliability scoring
-# =============================================================================
-
-def compute_reliability(external_signals: list) -> int:
-    """Return a reliability score (0–5) based on the number of external signals."""
-    return min(5, len(external_signals))

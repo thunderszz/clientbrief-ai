@@ -180,6 +180,7 @@ def _init_state(
         # Metadata
         sources=[],
         brief_reliability=0,
+        reliability_report={},
         cache_hit=False,
         errors=[],
     )
@@ -283,6 +284,7 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
             "final_brief": "",
             "sources": [],
             "brief_reliability": 0,
+            "reliability_report": {},
             "cache_hit": False,
             "errors": errors,
         }

@@ -147,5 +147,6 @@ class BriefingState(TypedDict):
     # Metadata
     sources: Annotated[list, operator.add]
     brief_reliability: int
+    reliability_report: dict
     cache_hit: bool
     errors: Annotated[list, operator.add]

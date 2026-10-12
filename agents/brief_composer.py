@@ -1,17 +1,17 @@
 """Brief Composer — fully deterministic, no LLM calls.
 
 Assembles all structured agent outputs into a final markdown pre-meeting
-brief.  Also computes the reliability score and aggregates a deduplicated
-source list from all research agents.
+brief.  Also computes the reliability report (see ``core/reliability.py``)
+and aggregates a deduplicated source list from all research agents.
 
 Per spec:
 - ``meeting_strategy["executive_summary"]`` is inserted at the top of
   the brief, under the header.
-- ``brief_reliability = min(5, len(external_signals))``.
+- ``brief_reliability`` is the 0-5 rating derived from the 0-100 score.
 - Person-level information is shown only when ``match_confidence`` is
   ``"medium"`` or ``"high"``.
 
-Ownership:  ``final_brief``, ``brief_reliability``, ``sources``.
+Ownership:  ``final_brief``, ``brief_reliability``, ``reliability_report``, ``sources``.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from core.utils import compute_reliability
+from core.reliability import aggregate_sources, compute_reliability_report
 
 
 # Confidence values that permit displaying person-level detail.
@@ -45,52 +45,10 @@ _MEETING_TYPE_LABELS: dict[str, str] = {
 
 
 # =============================================================================
-# Source aggregation
-# =============================================================================
-
-def _aggregate_sources(state: dict[str, Any]) -> list[str]:
-    """Collect and deduplicate sources from all research agents.
-
-    Sources come from three places:
-    1. ``company_profile["sources"]``   — list[str]
-    2. ``person_profile["sources"]``    — list[str]
-    3. ``external_signals[*]["source"]`` — str per signal
-
-    Returns a deduplicated list preserving insertion order.
-    """
-    seen: set[str] = set()
-    unique: list[str] = []
-
-    def _add(url: str) -> None:
-        url = url.strip()
-        if url and url not in seen:
-            seen.add(url)
-            unique.append(url)
-
-    # Company profile sources
-    cp: dict[str, Any] = state.get("company_profile", {})
-    for src in cp.get("sources", []):
-        _add(str(src))
-
-    # External signal sources
-    for sig in state.get("external_signals", []):
-        src = sig.get("source")
-        if src:
-            _add(str(src))
-
-    # Person profile sources
-    pp: dict[str, Any] = state.get("person_profile", {})
-    for src in pp.get("sources", []):
-        _add(str(src))
-
-    return unique
-
-
-# =============================================================================
 # Section builders — each returns a markdown string (may be empty)
 # =============================================================================
 
-def _build_header(state: dict[str, Any], reliability: int) -> str:
+def _build_header(state: dict[str, Any], report: dict[str, Any]) -> str:
     company = state.get("company_name", "Unknown Company")
     meeting_type = state.get("meeting_type", "")
     # meeting_stage may be None if the user did not provide it; fall back to
@@ -106,7 +64,7 @@ def _build_header(state: dict[str, Any], reliability: int) -> str:
     lines = [
         f"# Pre-Meeting Brief: {company}",
         f"**Meeting type:** {type_label} | **Stage:** {stage_label} | **Audience:** {stakeholder}",
-        f"**Brief reliability:** {reliability}/5",
+        f"**Brief reliability:** {report['rating']}/5 ({report['score']}/100)",
         f"*Generated: {ts}*",
     ]
 
@@ -446,21 +404,20 @@ def _build_source_footer(sources: list[str]) -> str:
 def run(state: dict[str, Any]) -> dict[str, Any]:
     """Compose the final markdown brief from all upstream state slices.
 
-    Writes: ``final_brief``, ``brief_reliability``, ``sources``.
+    Writes: ``final_brief``, ``brief_reliability``, ``reliability_report``, ``sources``.
     """
 
     # --- 1. Compute reliability -----------------------------------------------
-    external_signals: list = state.get("external_signals", [])
-    reliability = compute_reliability(external_signals)
+    report = compute_reliability_report(state)
 
     # --- 2. Aggregate sources -------------------------------------------------
-    sources = _aggregate_sources(state)
+    sources = aggregate_sources(state)
 
     # --- 3. Assemble sections -------------------------------------------------
     # "Your Position" is conditional — only appears when user-side context exists.
     your_position = _build_your_position(state)
 
-    sections: list[str] = [_build_header(state, reliability)]
+    sections: list[str] = [_build_header(state, report)]
     if your_position:
         sections.append("")
         sections.append(your_position)
@@ -491,6 +448,7 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "final_brief": final_brief,
-        "brief_reliability": reliability,
+        "brief_reliability": report["rating"],
+        "reliability_report": report,
         "sources": sources,
     }
