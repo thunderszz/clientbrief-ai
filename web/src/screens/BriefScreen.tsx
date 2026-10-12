@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { MarksLegend } from "../components/Marks";
 import { ReliabilityMeter } from "../components/ReliabilityMeter";
 import { Button, ModelChip } from "../components/ui";
-import { formatSignalDate, groupSourcesBySite, labelFor, siteOf, splitObjection } from "../lib/format";
+import { formatSignalDate, groupSourcesBySite, labelFor, safeUrl, siteOf, splitObjection } from "../lib/format";
 import type { BriefResult } from "../lib/types";
 
 const SECTIONS = [
@@ -35,11 +35,15 @@ function List({ items, className = "" }: { items?: string[]; className?: string 
   if (!items?.length) return <p className="text-pencil">Nothing found.</p>;
   return (
     <ul className={`list-disc space-y-1.5 pl-5 marker:text-pencil ${className}`}>
-      {items.map((item) => (
-        <li key={item}>{item}</li>
+      {items.map((item, i) => (
+        <li key={`${i}-${item}`}>{item}</li>
       ))}
     </ul>
   );
+}
+
+function Empty({ children }: { children: ReactNode }) {
+  return <p className="text-pencil">{children}</p>;
 }
 
 function Fact({ term, children }: { term: string; children: ReactNode }) {
@@ -155,8 +159,8 @@ export function BriefScreen({ result, origin, nodeLabels, onNew }: Props) {
                 <p className="text-pencil">No recent strategic signals were found. Ask about recent changes in the meeting.</p>
               ) : (
                 <ol className="space-y-6">
-                  {result.external_signals.map((signal) => (
-                    <li key={signal.description} className="grid gap-1 sm:grid-cols-[6.5rem_1fr] sm:gap-5">
+                  {result.external_signals.map((signal, i) => (
+                    <li key={`${i}-${signal.description}`} className="grid gap-1 sm:grid-cols-[6.5rem_1fr] sm:gap-5">
                       <p className="font-sans text-[14px] tabular-nums text-pencil">{formatSignalDate(signal.date)}</p>
                       <div>
                         <p className="font-sans text-[13px] font-medium text-ink-soft">{labelFor(signal.signal_type)}</p>
@@ -166,14 +170,16 @@ export function BriefScreen({ result, origin, nodeLabels, onNew }: Props) {
                         <p className="mt-1.5">
                           <span className="mark-inference">{signal.implication}</span>
                         </p>
-                        <a
-                          href={signal.source}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-block font-sans text-[13px] text-ballpoint hover:underline"
-                        >
-                          {siteOf(signal.source)}
-                        </a>
+                        {safeUrl(signal.source) && (
+                          <a
+                            href={safeUrl(signal.source)!}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-block font-sans text-[13px] text-ballpoint hover:underline"
+                          >
+                            {siteOf(signal.source)}
+                          </a>
+                        )}
                       </div>
                     </li>
                   ))}
@@ -183,31 +189,40 @@ export function BriefScreen({ result, origin, nodeLabels, onNew }: Props) {
 
             <Section id="pain-points">
               <h3 className="font-sans text-[15px] font-semibold">What the sources say</h3>
-              <ul className="mt-2 space-y-2">
-                {(pains.facts ?? []).map((fact) => (
-                  <li key={fact}>
-                    <span className="mark-fact">{fact}</span>
-                  </li>
-                ))}
-              </ul>
+              {pains.facts?.length ? (
+                <ul className="mt-2 space-y-2">
+                  {pains.facts.map((fact, i) => (
+                    <li key={`${i}-${fact}`}>
+                      <span className="mark-fact">{fact}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Empty>No facts could be confirmed from the sources.</Empty>
+              )}
               <h3 className="mt-7 font-sans text-[15px] font-semibold">What follows from them</h3>
-              <ul className="mt-2 space-y-2">
-                {(pains.inferences ?? []).map((inference) => (
-                  <li key={inference}>
-                    <span className="mark-inference">{inference.replace(/^\[INFERENCE\]\s*/i, "")}</span>
-                  </li>
-                ))}
-              </ul>
+              {pains.inferences?.length ? (
+                <ul className="mt-2 space-y-2">
+                  {pains.inferences.map((inference, i) => (
+                    <li key={`${i}-${inference}`}>
+                      <span className="mark-inference">{inference.replace(/^\[INFERENCE\]\s*/i, "")}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Empty>No inferences were drawn.</Empty>
+              )}
               <h3 className="mt-7 font-sans text-[15px] font-semibold">Hypotheses to test in the meeting</h3>
+              {!pains.hypotheses?.length && <Empty>No hypotheses were proposed.</Empty>}
               <ol className="mt-3 space-y-5">
-                {(pains.hypotheses ?? []).map((h) => (
-                  <li key={h.hypothesis} className="border-l-2 border-rule pl-4">
+                {(pains.hypotheses ?? []).map((h, i) => (
+                  <li key={`${i}-${h.hypothesis}`} className="border-l-2 border-rule pl-4">
                     <p className="font-sans text-[13px] text-pencil">{labelFor(h.confidence)} confidence</p>
                     <p className="mark-hypothesis">{h.hypothesis}</p>
                     {h.supporting_evidence.length > 0 && (
                       <ul className="mt-2 list-disc space-y-1 pl-5 font-sans text-[14px] text-ink-soft marker:text-pencil">
-                        {h.supporting_evidence.map((e) => (
-                          <li key={e}>{e}</li>
+                        {h.supporting_evidence.map((e, j) => (
+                          <li key={`${j}-${e}`}>{e}</li>
                         ))}
                       </ul>
                     )}
@@ -218,24 +233,33 @@ export function BriefScreen({ result, origin, nodeLabels, onNew }: Props) {
 
             <Section id="plan">
               <h3 className="font-sans text-[15px] font-semibold">How to open</h3>
-              <p className="mt-2 border-l-2 border-ballpoint pl-4">{strategy.opening_angle}</p>
+              {strategy.opening_angle ? (
+                <p className="mt-2 border-l-2 border-ballpoint pl-4">{strategy.opening_angle}</p>
+              ) : (
+                <Empty>No opening was suggested.</Empty>
+              )}
 
               <h3 className="mt-7 font-sans text-[15px] font-semibold">Questions to ask</h3>
-              <ol className="mt-2 list-decimal space-y-2 pl-6 marker:font-sans marker:text-[14px] marker:text-pencil">
-                {(strategy.recommended_questions ?? []).map((q) => (
-                  <li key={q}>{q}</li>
-                ))}
-              </ol>
+              {strategy.recommended_questions?.length ? (
+                <ol className="mt-2 list-decimal space-y-2 pl-6 marker:font-sans marker:text-[14px] marker:text-pencil">
+                  {strategy.recommended_questions.map((q, i) => (
+                    <li key={`${i}-${q}`}>{q}</li>
+                  ))}
+                </ol>
+              ) : (
+                <Empty>No suggested questions.</Empty>
+              )}
 
               <h3 className="mt-7 font-sans text-[15px] font-semibold">Points to make</h3>
               <List items={strategy.talking_points} className="mt-2" />
 
               <h3 className="mt-7 font-sans text-[15px] font-semibold">Likely objections</h3>
-              <div className="mt-2 divide-y divide-rule border-y border-rule">
-                {(strategy.possible_objections ?? []).map((raw) => {
+              {!strategy.possible_objections?.length && <Empty>No objections anticipated.</Empty>}
+              <div className="mt-2 divide-y divide-rule border-y border-rule empty:hidden">
+                {(strategy.possible_objections ?? []).map((raw, i) => {
                   const { objection, response } = splitObjection(raw);
                   return (
-                    <details key={raw} className="group py-3">
+                    <details key={`${i}-${raw}`} className="group py-3">
                       <summary className="cursor-pointer list-none font-sans text-[15px] font-medium text-ink marker:hidden">
                         <span className="mr-2 inline-block text-pencil transition-transform group-open:rotate-90">›</span>
                         {objection}
@@ -247,7 +271,11 @@ export function BriefScreen({ result, origin, nodeLabels, onNew }: Props) {
               </div>
 
               <h3 className="mt-7 font-sans text-[15px] font-semibold">Next step to propose</h3>
-              <p className="mt-2">{strategy.suggested_next_step}</p>
+              {strategy.suggested_next_step ? (
+                <p className="mt-2">{strategy.suggested_next_step}</p>
+              ) : (
+                <Empty>No next step was suggested.</Empty>
+              )}
             </Section>
 
             <Section id="company">
@@ -343,7 +371,8 @@ export function BriefScreen({ result, origin, nodeLabels, onNew }: Props) {
 
             <Section id="sources">
               <ul className="space-y-3 font-sans text-[14px]">
-                {groupSourcesBySite(result.sources).map((group) => (
+                {result.sources.length === 0 && <li className="text-pencil">No sources were collected.</li>}
+                {groupSourcesBySite(result.sources.filter((url) => safeUrl(url))).map((group) => (
                   <li key={group.site}>
                     <p className="font-medium text-ink">
                       {group.site} <span className="font-normal text-pencil">({group.urls.length})</span>
@@ -351,7 +380,7 @@ export function BriefScreen({ result, origin, nodeLabels, onNew }: Props) {
                     <ul className="mt-1 space-y-0.5">
                       {group.urls.map((url) => (
                         <li key={url} className="truncate">
-                          <a href={url} target="_blank" rel="noreferrer" className="text-ballpoint hover:underline">
+                          <a href={safeUrl(url)!} target="_blank" rel="noreferrer" className="text-ballpoint hover:underline">
                             {url.replace(/^https?:\/\/(www\.)?/, "")}
                           </a>
                         </li>

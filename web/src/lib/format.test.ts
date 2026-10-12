@@ -5,6 +5,7 @@ import {
   formatSignalDate,
   groupSourcesBySite,
   labelFor,
+  safeUrl,
   splitObjection,
   siteOf,
 } from "./format";
@@ -103,5 +104,20 @@ describe("demoLinkFromHash", () => {
     expect(demoLinkFromHash("#demo=Bad Slug")).toBeNull();
     expect(demoLinkFromHash("#other=x")).toBeNull();
     expect(demoLinkFromHash("")).toBeNull();
+  });
+});
+
+describe("safeUrl", () => {
+  it("keeps http and https links", () => {
+    expect(safeUrl("https://www.satispay.com/a")).toBe("https://www.satispay.com/a");
+    expect(safeUrl("http://example.com")).toBe("http://example.com/");
+  });
+
+  it("drops anything that isn't a web link", () => {
+    expect(safeUrl("javascript:alert(1)")).toBeNull();
+    expect(safeUrl(" JavaScript:alert(1)")).toBeNull();
+    expect(safeUrl("data:text/html,<script>")).toBeNull();
+    expect(safeUrl("not a url")).toBeNull();
+    expect(safeUrl(undefined)).toBeNull();
   });
 });

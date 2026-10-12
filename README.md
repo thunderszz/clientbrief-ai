@@ -7,8 +7,8 @@ what is known apart from what is guessed.
 ![ClientBrief home page: a box to describe the meeting and three recorded runs to watch](docs/media/compose-light.png)
 
 You can try it without any API key: the home page replays three real runs (Bending Spoons,
-Satispay, Moneyfarm) with their original timing, and every recorded brief can be opened on its
-own. With your own keys you can run it live on any company.
+Satispay, Moneyfarm) with their original timing. With your own keys you can run it live on any
+company.
 
 ## What you get
 

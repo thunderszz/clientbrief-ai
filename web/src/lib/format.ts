@@ -94,3 +94,14 @@ export function demoLinkFromHash(hash: string): DemoLink | null {
   if (!match) return null;
   return { slug: match[2], view: match[1] === "demo" ? "replay" : "brief" };
 }
+
+/** Only http(s) links from model or search output become clickable. */
+export function safeUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw.trim());
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
