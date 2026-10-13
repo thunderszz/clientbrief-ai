@@ -26,8 +26,10 @@ env/
 .DS_Store
 .claude/
 
-# Working files
+# Working files (kept locally, not part of the project)
 TASKS.md
+CLAUDE.md
+notes/
 .superpowers/
 
 # Web
