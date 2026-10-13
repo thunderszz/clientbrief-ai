@@ -152,7 +152,7 @@ type-checks and builds the web app, and builds and smoke-tests the Docker image.
 ## Project layout
 
 ```
-agents/      one module per pipeline step, plus the intake agent
+agents/      one module per pipeline step, the intake agent, and what they share
 core/        graph wiring, shared state, pipeline metadata, reliability score, result shape
 services/    LLM client (providers, tiers, retries), Tavily client, provider presets
 api/         FastAPI app: intake, SSE run stream, demo replay, daily quota
@@ -160,14 +160,14 @@ web/         React + Vite + TypeScript UI
 demo/        recorded runs, replayed by the public site
 scripts/     demo recorder
 tests/       pytest suite
-docs/        design spec, original project spec, screenshots
+docs/        screenshots
 ```
 
 ## What I'd do next
 
 - An evaluation set: a few dozen meetings with hand-checked briefs, to compare models and
   prompts on facts that turned out to be wrong rather than on impressions.
-- Wire the file cache into the graph. Today the orchestrator can read cached research, but
-  nothing writes it.
+- Cache the research per company, so a second brief on the same company is faster and
+  cheaper.
 - Save briefs per user, and let a second meeting with the same company start from the first
   brief.
