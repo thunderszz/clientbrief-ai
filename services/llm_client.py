@@ -104,10 +104,6 @@ _settings_override: ContextVar[LLMSettings | None] = ContextVar(
 _call_log: ContextVar[list[dict[str, Any]] | None] = ContextVar("llm_call_log", default=None)
 
 
-# =============================================================================
-# Configuration
-# =============================================================================
-
 def settings_from_env() -> LLMSettings:
     """Build settings from environment variables.
 
@@ -175,10 +171,6 @@ def collect_llm_calls() -> Iterator[list[dict[str, Any]]]:
     finally:
         _call_log.reset(token)
 
-
-# =============================================================================
-# Transports
-# =============================================================================
 
 def _gemini_generate(
     settings: LLMSettings,
@@ -266,10 +258,6 @@ def _is_retryable(exc: Exception) -> bool:
     message = str(exc)
     return any(marker in message for marker in _RETRYABLE_MARKERS)
 
-
-# =============================================================================
-# Public API
-# =============================================================================
 
 def structured_extract(
     *,

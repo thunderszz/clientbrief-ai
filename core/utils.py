@@ -1,9 +1,4 @@
-"""Deterministic utility helpers for ClientBrief AI.
-
-Every function in this module is pure Python with no LLM calls.
-Covers: domain normalization, role/function normalization, query templating,
-signal deduplication, date normalization, and input validation.
-"""
+"""Deterministic helpers: domains, roles, input validation, search queries, signals and dates."""
 
 from __future__ import annotations
 
@@ -16,9 +11,6 @@ from core.state import (
     VALID_MEETING_TYPES,
 )
 
-# =============================================================================
-# Domain / URL normalization
-# =============================================================================
 
 def normalize_domain(raw: str) -> str:
     """Extract a clean root domain from a URL or domain string.
@@ -49,15 +41,8 @@ def validate_domain(domain: str) -> bool:
     return bool(domain) and "." in domain and " " not in domain
 
 
-# =============================================================================
-# Role / function normalization
-# =============================================================================
-
-# Mapping from keyword patterns to canonical functions.
-# Each entry is (pattern, function, word_boundary).  When word_boundary is True
-# the pattern is matched as a whole word (via \b regex) to avoid false positives
-# like "cto" matching inside "director".
-# Order matters: first match wins, so more-specific keywords come first.
+# (keyword, function, whole_word). Whole-word keywords are matched with \b, so "cto" does not
+# match inside "director". The first match wins, so more specific keywords come first.
 _FUNCTION_KEYWORDS: list[tuple[str, str, bool]] = [
     # transformation must precede operations (COO vs. ERP Transformation Lead)
     ("transformation", "transformation", False),
@@ -122,8 +107,7 @@ _FUNCTION_KEYWORDS: list[tuple[str, str, bool]] = [
     ("procurement", "operations", False),
 ]
 
-# Keywords that hint at seniority level.
-# (pattern, level, word_boundary) — same convention as _FUNCTION_KEYWORDS.
+# (keyword, seniority, whole_word), same convention as above.
 _SENIORITY_KEYWORDS: list[tuple[str, str, bool]] = [
     ("chief", "c_level", False),
     ("ceo", "c_level", True),
@@ -151,41 +135,24 @@ _SENIORITY_KEYWORDS: list[tuple[str, str, bool]] = [
 ]
 
 
-def normalize_function(role: str) -> str:
-    """Map a free-text role/title to one of the canonical business functions.
-
-    Returns the canonical function string, or ``"general"`` if no match.
-    """
-    lower = role.lower().strip()
-    for keyword, function, word_boundary in _FUNCTION_KEYWORDS:
-        if word_boundary:
-            if re.search(rf"\b{re.escape(keyword)}\b", lower):
-                return function
-        else:
-            if keyword in lower:
-                return function
-    return "general"
-
-
-def normalize_seniority(role: str) -> str | None:
-    """Infer seniority level from a free-text role/title.
-
-    Returns a canonical seniority string, or ``None`` if indeterminate.
-    """
-    lower = role.lower().strip()
-    for keyword, level, word_boundary in _SENIORITY_KEYWORDS:
-        if word_boundary:
-            if re.search(rf"\b{re.escape(keyword)}\b", lower):
-                return level
-        else:
-            if keyword in lower:
-                return level
+def _first_match(role: str, keywords: list[tuple[str, str, bool]]) -> str | None:
+    text = role.lower().strip()
+    for keyword, value, whole_word in keywords:
+        found = re.search(rf"\b{re.escape(keyword)}\b", text) if whole_word else keyword in text
+        if found:
+            return value
     return None
 
 
-# =============================================================================
-# Input validation
-# =============================================================================
+def normalize_function(role: str) -> str:
+    """Map a free-text title to a business function, or ``"general"`` if none matches."""
+    return _first_match(role, _FUNCTION_KEYWORDS) or "general"
+
+
+def normalize_seniority(role: str) -> str | None:
+    """Map a free-text title to a seniority level, or None if it does not say."""
+    return _first_match(role, _SENIORITY_KEYWORDS)
+
 
 def validate_inputs(
     company_name: str,
@@ -194,13 +161,9 @@ def validate_inputs(
     stakeholder_role: str,
     meeting_stage: str | None = None,
 ) -> list[str]:
-    """Validate required input fields and return a list of error messages.
+    """Return one message per invalid field; an empty list means the input is valid.
 
-    An empty list means all validations passed.
-
-    ``meeting_stage`` is optional.  When provided it must be one of the
-    canonical ``VALID_MEETING_STAGES`` values; when omitted the orchestrator
-    defaults to ``"first_intro"``.
+    ``meeting_stage`` is optional, but when given it must be a known stage.
     """
     errors: list[str] = []
     if not company_name or not company_name.strip():
@@ -224,12 +187,8 @@ def validate_inputs(
     return errors
 
 
-# =============================================================================
-# Tavily query templating
-# =============================================================================
-
 def build_company_queries(company_name: str, domain: str) -> list[str]:
-    """Return the standard set of Tavily queries for company research."""
+    """Search queries for an overview of the company."""
     return [
         f'"{company_name}" company overview business model',
         f'"{company_name}" products customers industry',
@@ -241,11 +200,7 @@ def build_signal_queries(
     company_name: str,
     extra_queries: list[str] | None = None,
 ) -> list[str]:
-    """Return Tavily queries for external-signals research.
-
-    Always includes the always-on queries from the spec.
-    ``extra_queries`` are appended (typically from the research plan).
-    """
+    """Search queries for recent news: the standard three plus *extra_queries* from the plan."""
     current_year = datetime.now().year
     prev_year = current_year - 1
     queries = [
@@ -263,10 +218,7 @@ def build_person_queries(
     company_name: str,
     contact_title: str | None = None,
 ) -> list[str]:
-    """Return Tavily queries for person research.
-
-    Follows the candidate search patterns from the spec.
-    """
+    """Search queries that tend to surface team pages, speaker bios and interviews."""
     queries = [
         f'"{contact_name}" "{company_name}"',
         f'"{contact_name}" "{company_name}" speaker bio',
@@ -277,51 +229,23 @@ def build_person_queries(
     return queries
 
 
-# =============================================================================
-# Signal deduplication
-# =============================================================================
-
 def _signal_fingerprint(signal: dict) -> str:
-    """Create a coarse fingerprint for a signal dict.
-
-    Two signals are considered duplicates if their normalized descriptions
-    share enough overlap. We use a simple lowered, stripped, punctuation-removed
-    description as the key.
-    """
-    desc = signal.get("description", "")
-    desc = re.sub(r"[^\w\s]", "", desc.lower()).strip()
-    # collapse whitespace
-    desc = re.sub(r"\s+", " ", desc)
-    return desc
+    desc = re.sub(r"[^\w\s]", "", signal.get("description", "").lower()).strip()
+    return re.sub(r"\s+", " ", desc)
 
 
 def deduplicate_signals(signals: list[dict]) -> list[dict]:
-    """Remove near-duplicate signals based on description similarity.
-
-    Keeps the first occurrence (which preserves the original ordering from
-    the retrieval step).
-
-    NOTE: This currently deduplicates on exact normalised-description match
-    only (lowered, punctuation-stripped, whitespace-collapsed).  It does NOT
-    use fuzzy/semantic similarity.  A fuzzy approach (e.g. token-overlap or
-    embedding cosine) can be added later if near-miss duplicates become a
-    quality problem in practice.
-    """
+    """Drop signals whose description matches an earlier one once case, punctuation and
+    spacing are ignored. Signals with an empty description are dropped too."""
     seen: set[str] = set()
     unique: list[dict] = []
-    for s in signals:
-        fp = _signal_fingerprint(s)
-        if not fp:
-            continue
-        if fp not in seen:
-            seen.add(fp)
-            unique.append(s)
+    for signal in signals:
+        fingerprint = _signal_fingerprint(signal)
+        if fingerprint and fingerprint not in seen:
+            seen.add(fingerprint)
+            unique.append(signal)
     return unique
 
-
-# =============================================================================
-# Date normalization
-# =============================================================================
 
 # Common date patterns we try to parse, ordered from most to least specific.
 _DATE_FORMATS: list[str] = [

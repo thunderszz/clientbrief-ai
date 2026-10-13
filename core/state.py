@@ -1,108 +1,61 @@
-"""Shared state definition for the ClientBrief AI pipeline.
+"""The shared state passed between pipeline nodes, and the values its enum-like fields take.
 
-This module defines the BriefingState TypedDict used across all LangGraph nodes,
-plus the canonical enumerations for meeting types, business functions,
-meeting stages, and relationship statuses.
-
-List-typed fields that may be written by multiple parallel nodes in the same
-step (``errors``, ``sources``, ``external_signals``) use ``Annotated`` with
-``operator.add`` so LangGraph concatenates rather than overwrites them.
+Each node returns a partial update with the slice it owns. The list fields that the three
+parallel research nodes may all write to (``errors``, ``sources``, ``external_signals``,
+``llm_calls``) use an add-reducer, so LangGraph concatenates their updates.
 """
 
 import operator
 from typing import Annotated, TypedDict
 
-# --- Canonical enumerations ---------------------------------------------------
+VALID_MEETING_TYPES = frozenset({"consulting_intro", "sales_discovery", "account_review"})
 
-VALID_MEETING_TYPES: set[str] = {
-    "consulting_intro",
-    "sales_discovery",
-    "account_review",
-}
+VALID_MEETING_STAGES = frozenset(
+    {
+        "first_intro",
+        "discovery_followup",
+        "solution_discussion",
+        "proposal_review",
+        "negotiation",
+        "client_kickoff",
+        "account_expansion",
+    }
+)
 
-VALID_FUNCTIONS: set[str] = {
-    "finance",
-    "accounting",
-    "engineering",
-    "product",
-    "sales",
-    "strategy",
-    "it_data",
-    "operations",
-    "transformation",
-    "general",  # fallback when normalize_function() cannot match a role
-}
+VALID_RELATIONSHIP_STATUSES = frozenset({"prospect", "active_opportunity", "client", "former_client"})
 
-SENIORITY_LEVELS: list[str] = [
-    "c_level",
-    "vp",
-    "director",
-    "head",
-    "manager",
-    "individual_contributor",
-]
+VALID_PREVIOUS_OUTCOMES = frozenset({"positive", "neutral", "unclear", "no_previous_meeting"})
 
-# --- Engagement-context enumerations ------------------------------------------
+# What the user tells us about the meeting, in the order the UI and the API present it.
+INPUT_FIELDS = (
+    "company_name",
+    "domain",
+    "meeting_type",
+    "stakeholder_role",
+    "meeting_goal",
+    "contact_name",
+    "contact_title",
+    "meeting_stage",
+    "relationship_status",
+    "previous_meeting_outcome",
+    "meeting_notes_summary",
+    "user_role",
+    "user_company",
+    "user_function",
+    "engagement_type",
+    "desired_outcome",
+    "success_definition",
+)
 
-VALID_MEETING_STAGES: set[str] = {
-    "first_intro",
-    "discovery_followup",
-    "solution_discussion",
-    "proposal_review",
-    "negotiation",
-    "client_kickoff",
-    "account_expansion",
-}
-
-VALID_PREVIOUS_OUTCOMES: set[str] = {
-    "positive",
-    "neutral",
-    "unclear",
-    "no_previous_meeting",
-}
-
-VALID_RELATIONSHIP_STATUSES: set[str] = {
-    "prospect",
-    "active_opportunity",
-    "client",
-    "former_client",
-}
-
-VALID_RESEARCH_MODES: set[str] = {
-    "full",           # first-intro / low-context — rich baseline research
-    "light",          # follow-up / known-account — reduce baseline, keep signals
-    "update_only",    # advanced stages — minimal baseline, focus on recent updates
-}
-
-VALID_INFERENCE_CONFIDENCE: set[str] = {
-    "high",
-    "medium",
-    "low",
-    "not_needed",     # all engagement fields were explicitly provided
-}
-
-
-# --- State definition ---------------------------------------------------------
 
 class BriefingState(TypedDict):
-    """Full shared state passed through every LangGraph node.
-
-    Each agent owns only its designated slice — see CLAUDE.md for ownership map.
-
-    Fields annotated with ``Annotated[list, operator.add]`` use a LangGraph
-    *add-reducer*: when multiple parallel nodes write to the same list field
-    in a single step, the values are concatenated instead of overwritten.
-    This is required for the fan-out/fan-in pattern where three research
-    agents run concurrently and may each append errors.
-    """
-
-    # Pre-intake (optional — populated only when intake agent was used)
+    # Set only when the meeting was described in free text and parsed by the intake agent.
     raw_meeting_context: str | None
     intake_missing_fields: list
     intake_low_confidence_fields: list
     intake_confirmation_summary: str | None
 
-    # User inputs
+    # The meeting.
     company_name: str
     domain: str
     meeting_type: str
@@ -111,13 +64,14 @@ class BriefingState(TypedDict):
     contact_name: str | None
     contact_title: str | None
 
-    # Engagement inputs (optional — None means "not provided by user")
+    # Where the relationship stands. None means the user did not say, and the
+    # engagement nodes infer or default it.
     meeting_stage: str | None
     previous_meeting_outcome: str | None
     relationship_status: str | None
     meeting_notes_summary: str | None
 
-    # User-side context (optional — extracted by intake or provided directly)
+    # Who the user is and what they want. It frames the analysis; it is not evidence.
     user_role: str | None
     user_company: str | None
     user_function: str | None
@@ -125,28 +79,24 @@ class BriefingState(TypedDict):
     desired_outcome: str | None
     success_definition: str | None
 
-    # Deterministic derived fields (orchestrator)
-    normalized_function: str
-    normalized_seniority: str | None
+    # Derived from the contact's title, or the stakeholder role when there is none.
+    normalized_function: str  # finance, accounting, engineering, ... or "general"
+    normalized_seniority: str | None  # c_level, vp, director, head, manager, individual_contributor
 
-    # Engagement inference (LLM-inferred gap-fill for missing engagement inputs)
+    # Node outputs, in pipeline order.
     engagement_inference: dict
-
-    # Agent outputs
+    engagement_context: dict
     research_plan: dict
     company_profile: dict
     external_signals: Annotated[list, operator.add]
     person_profile: dict
     audience_context: dict
-    engagement_context: dict
     pain_point_hypotheses: dict
     meeting_strategy: dict
     final_brief: str
 
-    # Metadata
     sources: Annotated[list, operator.add]
-    brief_reliability: int
+    brief_reliability: int  # 0-5, derived from the 0-100 score in reliability_report
     reliability_report: dict
-    cache_hit: bool
     errors: Annotated[list, operator.add]
-    llm_calls: Annotated[list, operator.add]  # one record per LLM call, tagged with node
+    llm_calls: Annotated[list, operator.add]  # one record per LLM call, tagged with its node

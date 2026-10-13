@@ -1,45 +1,26 @@
-"""Meeting Strategy Agent — LLM reasoning for practical meeting preparation.
+"""Meeting strategy: the opening, talking points, questions, objections and next step.
 
-Reads company_profile, external_signals, person_profile, audience_context,
-engagement_context, and pain_point_hypotheses to produce a structured
-meeting strategy with:
-- **executive_summary** — concise overview for the meeting host
-- **opening_angle** — how to open the conversation credibly
-- **talking_points** — company-specific and audience-specific points
-- **recommended_questions** — grounded in research, not generic
-- **possible_objections** — what the stakeholder might push back on
-- **suggested_next_step** — a concrete action to propose at the end
-
-The engagement context (interaction stage, conversation mode, tone,
-next-step pressure) is a **primary driver** of the strategy.  A first
-intro demands a different opening, questions, and next step than a
-negotiation or account-expansion meeting.
-
-Person-specific details may influence the strategy ONLY when
-``person_profile.match_confidence`` is ``"medium"`` or ``"high"``.
-
-Ownership:  ``meeting_strategy`` only.
+Everything earlier in the pipeline feeds this node. The engagement stage drives the shape
+of the strategy (a first intro and a negotiation need different questions and next steps),
+and so does the user's own goal when they gave one.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agents.person_research import has_reliable_match
+from agents.prompt_sections import (
+    audience_lines,
+    company_profile_lines,
+    person_profile_lines,
+    signals_section,
+    user_side_lines,
+)
 from services.llm_client import Tier, structured_extract
 
-logger = logging.getLogger(__name__)
-
-# Confidence values that permit using person-level details.
-# Both "low" and "none" (no search attempted) are non-reliable.
-_RELIABLE_CONFIDENCE = frozenset({"medium", "high"})
-
-
-# ---------------------------------------------------------------------------
-# Pydantic schema
-# ---------------------------------------------------------------------------
 
 class MeetingStrategy(BaseModel):
     """Structured meeting strategy for the upcoming stakeholder meeting."""
@@ -89,10 +70,6 @@ class MeetingStrategy(BaseModel):
         )
     )
 
-
-# ---------------------------------------------------------------------------
-# System prompt
-# ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = """\
 You are a meeting-preparation strategist building a pre-meeting brief.
@@ -145,180 +122,86 @@ STRICT RULES:
     - desired_outcome / success_definition → calibrate the suggested
       next step and shape what "success" looks like in the strategy
     - meeting_goal → already used; desired_outcome is more specific
-    If user-side context is absent, fall back to the existing logic
-    (meeting_type + engagement_context as strategy drivers).
+    If user-side context is absent, let meeting_type and the engagement
+    context drive the strategy.
 """
 
 
-def _empty_strategy() -> dict[str, Any]:
-    return MeetingStrategy(
-        executive_summary="",
-        opening_angle="",
-        suggested_next_step="",
-    ).model_dump()
+def empty_strategy() -> dict[str, Any]:
+    return MeetingStrategy(executive_summary="", opening_angle="", suggested_next_step="").model_dump()
 
-
-# ---------------------------------------------------------------------------
-# Build the user prompt
-# ---------------------------------------------------------------------------
 
 def _build_user_prompt(state: dict[str, Any]) -> str:
-    parts: list[str] = []
+    parts = [
+        "=== Meeting Context ===",
+        f"Company: {state.get('company_name', 'unknown')}",
+        f"Meeting type: {state.get('meeting_type', '')}",
+        f"Stakeholder role: {state.get('stakeholder_role', '')}",
+        f"Meeting goal: {state.get('meeting_goal', '')}",
+    ]
 
-    # Meeting context
-    parts.append("=== Meeting Context ===")
-    parts.append(f"Company: {state.get('company_name', 'unknown')}")
-    parts.append(f"Meeting type: {state.get('meeting_type', '')}")
-    parts.append(f"Stakeholder role: {state.get('stakeholder_role', '')}")
-    parts.append(f"Meeting goal: {state.get('meeting_goal', '')}")
+    user_side = user_side_lines(state)
+    if user_side:
+        parts += ["", "=== User-Side Context (strategy driver) ===", *user_side]
 
-    # User-side context — primary strategy driver when present
-    _user_fields = {
-        "user_role": "User role",
-        "user_company": "User company",
-        "user_function": "User function",
-        "engagement_type": "Engagement type",
-        "desired_outcome": "Desired outcome",
-        "success_definition": "Success definition",
-    }
-    user_lines = []
-    for key, label in _user_fields.items():
-        val = state.get(key)
-        if val:
-            user_lines.append(f"{label}: {val}")
-    if user_lines:
-        parts.append("")
-        parts.append("=== User-Side Context (strategy driver) ===")
-        parts.extend(user_lines)
+    engagement = state.get("engagement_context", {})
+    if engagement.get("interaction_stage"):
+        parts += [
+            "",
+            "=== Engagement Context ===",
+            f"Interaction stage: {engagement['interaction_stage']}",
+            f"Relationship status: {engagement.get('relationship_status') or 'unknown'}",
+            f"Conversation mode: {engagement.get('conversation_mode', 'exploratory')}",
+            f"Stage objective: {engagement.get('stage_objective', '')}",
+            f"Recommended tone: {engagement.get('recommended_tone', '')}",
+            f"Next-step pressure: {engagement.get('next_step_pressure', 'low')}",
+        ]
+        if engagement.get("decision_risks"):
+            parts.append(f"Decision risks: {'; '.join(engagement['decision_risks'])}")
+        if engagement.get("continuity_context"):
+            parts.append(f"Continuity context: {engagement['continuity_context']}")
 
-    # Engagement context — primary driver for strategy calibration
-    ec: dict[str, Any] = state.get("engagement_context", {})
-    if ec.get("interaction_stage"):
-        parts.append("")
-        parts.append("=== Engagement Context ===")
-        parts.append(f"Interaction stage: {ec['interaction_stage']}")
-        parts.append(f"Relationship status: {ec.get('relationship_status') or 'unknown'}")
-        parts.append(f"Conversation mode: {ec.get('conversation_mode', 'exploratory')}")
-        parts.append(f"Stage objective: {ec.get('stage_objective', '')}")
-        parts.append(f"Recommended tone: {ec.get('recommended_tone', '')}")
-        parts.append(f"Next-step pressure: {ec.get('next_step_pressure', 'low')}")
-        risks = ec.get("decision_risks", [])
-        if risks:
-            parts.append(f"Decision risks: {'; '.join(risks)}")
-        continuity = ec.get("continuity_context")
-        if continuity:
-            parts.append(f"Continuity context: {continuity}")
+    company = state.get("company_profile", {})
+    if any(company.get(key) for key in ("industry", "business_model", "company_positioning")):
+        parts += ["", "=== Company Profile ===", *company_profile_lines(company)]
 
-    # Company profile
-    cp: dict[str, Any] = state.get("company_profile", {})
-    if any(cp.get(k) for k in ("industry", "business_model", "company_positioning")):
-        parts.append("")
-        parts.append("=== Company Profile ===")
-        for key in ("industry", "business_model", "company_positioning"):
-            val = cp.get(key)
-            if val:
-                parts.append(f"{key}: {val}")
-        for key in ("products", "customer_segments", "geographies", "complexity_signals"):
-            items = cp.get(key, [])
-            if items:
-                parts.append(f"{key}: {', '.join(str(i) for i in items[:6])}")
+    parts += signals_section(state.get("external_signals", []))
 
-    # External signals
-    signals: list[dict] = state.get("external_signals", [])
-    if signals:
-        parts.append("")
-        parts.append("=== Recent Strategic Signals ===")
-        for i, sig in enumerate(signals[:10], 1):
-            date_str = f" ({sig['date']})" if sig.get("date") else ""
+    audience = state.get("audience_context", {})
+    if audience.get("department"):
+        parts += ["", "=== Audience Context ===", *audience_lines(audience, with_style=True)]
+
+    pain_points = state.get("pain_point_hypotheses", {})
+    if pain_points.get("hypotheses"):
+        parts += ["", "=== Pain Point Hypotheses ==="]
+        for number, item in enumerate(pain_points["hypotheses"][:8], 1):
+            evidence = "; ".join(item.get("supporting_evidence", []))
             parts.append(
-                f"{i}. [{sig.get('signal_type', '?')}]{date_str} "
-                f"{sig.get('description', '')}  "
-                f"Implication: {sig.get('implication', 'n/a')}  "
-                f"(confidence: {sig.get('confidence', '?')})"
-            )
-    else:
-        parts.append("\nNo recent strategic signals available.")
-
-    # Audience context
-    ac: dict[str, Any] = state.get("audience_context", {})
-    if ac.get("department"):
-        parts.append("")
-        parts.append("=== Audience Context ===")
-        parts.append(f"Department: {ac.get('department', '')}")
-        parts.append(f"Seniority: {ac.get('role_seniority') or 'unknown'}")
-        priorities = ac.get("likely_priorities", [])
-        if priorities:
-            parts.append(f"Likely priorities: {', '.join(priorities)}")
-        topics = ac.get("relevant_topics", [])
-        if topics:
-            parts.append(f"Relevant topics: {', '.join(topics)}")
-        style = ac.get("communication_style")
-        if style:
-            parts.append(f"Communication style: {style}")
-        sensitivities = ac.get("potential_sensitivities", [])
-        if sensitivities:
-            parts.append(f"Potential sensitivities: {', '.join(sensitivities)}")
-
-    # Pain point hypotheses
-    pph: dict[str, Any] = state.get("pain_point_hypotheses", {})
-    hypotheses = pph.get("hypotheses", [])
-    if hypotheses:
-        parts.append("")
-        parts.append("=== Pain Point Hypotheses ===")
-        for i, h in enumerate(hypotheses[:8], 1):
-            evidence = "; ".join(h.get("supporting_evidence", []))
-            parts.append(
-                f"{i}. [{h.get('confidence', '?')}] {h.get('hypothesis', '')}  "
+                f"{number}. [{item.get('confidence', '?')}] {item.get('hypothesis', '')}  "
                 f"Evidence: {evidence or 'n/a'}"
             )
-    items_to_validate = pph.get("items_to_validate", [])
-    if items_to_validate:
-        parts.append(f"Items to validate: {'; '.join(items_to_validate[:6])}")
+    if pain_points.get("items_to_validate"):
+        parts.append(f"Items to validate: {'; '.join(pain_points['items_to_validate'][:6])}")
 
-    # Person profile — gated on confidence
-    pp: dict[str, Any] = state.get("person_profile", {})
-    confidence = pp.get("match_confidence", "none")
-
-    if confidence in _RELIABLE_CONFIDENCE:
-        parts.append("")
-        parts.append("=== Person Profile (reliable — use to personalise) ===")
-        for key in ("name", "title", "department", "background_summary"):
-            val = pp.get(key)
-            if val:
-                parts.append(f"{key}: {val}")
-        pub = pp.get("public_signals", [])
-        if pub:
-            parts.append(f"Public signals: {', '.join(pub[:5])}")
+    person = state.get("person_profile", {})
+    if has_reliable_match(person):
+        parts += ["", "=== Person Profile (reliable — use to personalise) ===", *person_profile_lines(person)]
     else:
-        parts.append("")
-        parts.append(
-            "No reliable person profile — tailor strategy to company "
-            "and audience context only."
-        )
-
+        parts += ["", "No reliable person profile — tailor strategy to company and audience context only."]
     return "\n".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# Public entry-point
-# ---------------------------------------------------------------------------
-
 def run(state: dict[str, Any]) -> dict[str, Any]:
-    """Produce a meeting strategy from all accumulated research and analysis."""
-
-    new_errors: list[str] = []
-
-    user_prompt = _build_user_prompt(state)
-
+    """Turn the analysis into ``meeting_strategy``."""
     result = structured_extract(
         system_prompt=_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
+        user_prompt=_build_user_prompt(state),
         response_model=MeetingStrategy,
         tier=Tier.REASONING,
     )
-
     if result is None:
-        new_errors.append("meeting_strategy_agent: LLM reasoning failed, returning empty strategy.")
-        return {"meeting_strategy": _empty_strategy(), "errors": new_errors}
-
+        return {
+            "meeting_strategy": empty_strategy(),
+            "errors": ["meeting_strategy_agent: LLM reasoning failed, returning empty strategy."],
+        }
     return {"meeting_strategy": result.model_dump()}

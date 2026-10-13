@@ -1,44 +1,15 @@
-"""Engagement Context Agent — fully deterministic, no LLM calls.
+"""Engagement context: where this meeting sits in the relationship, and what follows from it.
 
-Resolves the final normalised engagement context by merging three sources
-with strict precedence:
-
-    1. Explicit user-provided values  (highest priority)
-    2. Inferred values from ``engagement_inference``
-    3. Safe defaults  (lowest priority)
-
-This ensures that:
-- user intent is always respected when stated
-- LLM-inferred values fill gaps transparently
-- the system never crashes on missing inputs
-
-The agent also derives ``research_mode`` (full / light / update_only) from
-the resolved engagement state, which the research planner uses to calibrate
-research depth.
-
-Inputs:
-- ``meeting_stage``               — raw user input (may be None)
-- ``previous_meeting_outcome``    — raw user input (may be None)
-- ``relationship_status``         — raw user input (may be None)
-- ``meeting_notes_summary``       — raw user input (may be None)
-- ``meeting_type``                — always present
-- ``normalized_seniority``        — from orchestrator
-- ``engagement_inference``        — from engagement_inference_agent
-
-Output: ``engagement_context`` dict with 9 fields (added ``research_mode``).
-
-Ownership:  ``engagement_context`` only.
+Deterministic. Each field is resolved in order of trust: what the user stated, then what
+the inference node guessed, then a default. The stage then sets the conversation mode, tone,
+risks and next-step pressure, and how much baseline research the planner should run.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-# =============================================================================
-# Lookup tables
-# =============================================================================
-
-# --- Conversation mode per meeting stage -------------------------------------
+# Conversation mode per meeting stage.
 _CONVERSATION_MODES: dict[str, str] = {
     "first_intro":          "exploratory",
     "discovery_followup":   "consultative",
@@ -49,7 +20,7 @@ _CONVERSATION_MODES: dict[str, str] = {
     "account_expansion":    "consultative",
 }
 
-# --- Stage objective ---------------------------------------------------------
+# What the meeting should achieve at each stage.
 _STAGE_OBJECTIVES: dict[str, str] = {
     "first_intro": (
         "Establish credibility, understand the stakeholder's world, "
@@ -81,7 +52,7 @@ _STAGE_OBJECTIVES: dict[str, str] = {
     ),
 }
 
-# --- Next-step pressure ------------------------------------------------------
+# Next-step pressure.
 _NEXT_STEP_PRESSURE: dict[str, str] = {
     "first_intro":          "low",
     "discovery_followup":   "low",
@@ -92,7 +63,7 @@ _NEXT_STEP_PRESSURE: dict[str, str] = {
     "account_expansion":    "moderate",
 }
 
-# --- Base decision risks per stage -------------------------------------------
+# Decision risks per stage.
 _STAGE_RISKS: dict[str, list[str]] = {
     "first_intro": [
         "Stakeholder may not see enough relevance to grant a follow-up",
@@ -126,7 +97,7 @@ _STAGE_RISKS: dict[str, list[str]] = {
     ],
 }
 
-# --- Outcome-adjusted risk modifiers ----------------------------------------
+# Extra risks when the last meeting did not go clearly well.
 _OUTCOME_RISK_MODIFIERS: dict[str, list[str]] = {
     "neutral": [
         "Previous interaction did not generate strong engagement — may need to re-establish relevance",
@@ -136,7 +107,7 @@ _OUTCOME_RISK_MODIFIERS: dict[str, list[str]] = {
     ],
 }
 
-# --- Recommended tone per stage x seniority ---------------------------------
+# Recommended tone per stage, refined by seniority where it matters.
 _TONE_TEMPLATES: dict[str, dict[str, str]] = {
     "first_intro": {
         "_default":  "Curious and respectful — ask more than tell, demonstrate genuine interest in their challenges",
@@ -169,7 +140,7 @@ _TONE_TEMPLATES: dict[str, dict[str, str]] = {
     },
 }
 
-# --- Relationship-status inference from meeting_stage -----------------------
+# Relationship to assume for each stage when it was neither stated nor inferred.
 _DEFAULT_RELATIONSHIP: dict[str, str] = {
     "first_intro":          "prospect",
     "discovery_followup":   "prospect",
@@ -180,8 +151,7 @@ _DEFAULT_RELATIONSHIP: dict[str, str] = {
     "account_expansion":    "client",
 }
 
-# --- Research mode per meeting stage ----------------------------------------
-# Determines how much baseline research the planner should run.
+# How much baseline research each stage needs: full, light or update_only.
 _RESEARCH_MODE_TABLE: dict[str, str] = {
     "first_intro":          "full",
     "discovery_followup":   "light",
@@ -193,144 +163,82 @@ _RESEARCH_MODE_TABLE: dict[str, str] = {
 }
 
 
-# =============================================================================
-# Helpers
-# =============================================================================
-
-def _resolve_with_precedence(
-    explicit: Any | None,
-    inferred: Any | None,
-    default: Any,
-) -> Any:
-    """Return the first non-None value in precedence order:
-    explicit > inferred > default.
-    """
-    if explicit is not None:
-        return explicit
-    if inferred is not None:
-        return inferred
-    return default
+def _first_known(*values: Any) -> Any:
+    return next((value for value in values if value is not None), None)
 
 
 def _resolve_tone(meeting_stage: str, seniority: str | None) -> str:
-    """Pick the best tone recommendation for stage x seniority."""
     stage_tones = _TONE_TEMPLATES.get(meeting_stage, _TONE_TEMPLATES["first_intro"])
     if seniority and seniority in stage_tones:
         return stage_tones[seniority]
     return stage_tones.get("_default", "Professional and attentive")
 
 
-def _build_continuity_context(
-    previous_meeting_outcome: str | None,
-    meeting_notes_summary: str | None,
-) -> str | None:
-    """Format prior-interaction context into a concise summary."""
-    parts: list[str] = []
-
-    if previous_meeting_outcome and previous_meeting_outcome != "no_previous_meeting":
-        outcome_labels = {
-            "positive": "Previous interaction was positive.",
-            "neutral": "Previous interaction was neutral — no strong signal either way.",
-            "unclear": "Outcome of previous interaction is unclear — may need to reassess.",
-        }
-        parts.append(outcome_labels.get(
-            previous_meeting_outcome,
-            f"Previous outcome: {previous_meeting_outcome}.",
-        ))
-
-    if meeting_notes_summary and meeting_notes_summary.strip():
-        parts.append(f"Notes: {meeting_notes_summary.strip()}")
-
-    return " ".join(parts) if parts else None
+_OUTCOME_SUMMARIES = {
+    "positive": "Previous interaction was positive.",
+    "neutral": "Previous interaction was neutral — no strong signal either way.",
+    "unclear": "Outcome of previous interaction is unclear — may need to reassess.",
+}
 
 
-def _resolve_research_mode(
-    meeting_stage: str,
-    relationship_status: str | None,
-    inference_confidence: str | None,
-) -> str:
-    """Derive research_mode from resolved engagement state.
+def _continuity(previous_outcome: str | None, notes: str | None) -> str | None:
+    """One line about the last interaction, or None when there was none."""
+    parts = []
+    if previous_outcome and previous_outcome != "no_previous_meeting":
+        parts.append(_OUTCOME_SUMMARIES.get(previous_outcome, f"Previous outcome: {previous_outcome}."))
+    if notes and notes.strip():
+        parts.append(f"Notes: {notes.strip()}")
+    return " ".join(parts) or None
 
-    Rules:
-    - Base mode comes from meeting_stage → _RESEARCH_MODE_TABLE.
-    - Former clients always get ``full`` research (need to re-learn context).
-    - Low inference confidence upgrades to at least ``light`` (don't reduce
-      research when we're uncertain about the engagement state).
-    """
-    base = _RESEARCH_MODE_TABLE.get(meeting_stage, "full")
 
-    # Former clients need full re-research regardless of stage
-    if relationship_status == "former_client":
+def _research_mode(meeting_stage: str, relationship_status: str | None, confidence: str | None) -> str:
+    """How much baseline research to run. Former clients, and shaky guesses, get the full run."""
+    if relationship_status == "former_client" or confidence == "low":
         return "full"
-
-    # Low inference confidence → don't reduce research aggressively
-    if inference_confidence == "low" and base != "full":
-        return "full"
-
-    return base
+    return _RESEARCH_MODE_TABLE.get(meeting_stage, "full")
 
 
-# =============================================================================
-# Public entry-point
-# =============================================================================
-
-def run(state: dict[str, Any]) -> dict[str, Any]:
-    """Produce engagement context using hybrid resolution: explicit > inferred > default.
-
-    Remains fully deterministic — no LLM calls.  Writes only ``engagement_context``.
-    """
-
-    # --- Read raw user inputs -------------------------------------------------
-    explicit_stage: str | None = state.get("meeting_stage")
-    explicit_relationship: str | None = state.get("relationship_status")
-    explicit_outcome: str | None = state.get("previous_meeting_outcome")
-    meeting_notes_summary: str | None = state.get("meeting_notes_summary")
-    normalized_seniority: str | None = state.get("normalized_seniority")
-
-    # --- Read inferred values -------------------------------------------------
-    ei: dict[str, Any] = state.get("engagement_inference", {})
-    inferred_stage: str | None = ei.get("inferred_meeting_stage")
-    inferred_relationship: str | None = ei.get("inferred_relationship_status")
-    inferred_outcome: str | None = ei.get("inferred_previous_meeting_outcome")
-    inference_confidence: str | None = ei.get("confidence")
-
-    # --- Resolve final values with precedence ---------------------------------
-    meeting_stage: str = _resolve_with_precedence(
-        explicit_stage, inferred_stage, "first_intro",
-    )
-    relationship_status: str = _resolve_with_precedence(
-        explicit_relationship,
-        inferred_relationship,
-        _DEFAULT_RELATIONSHIP.get(meeting_stage, "prospect"),
-    )
-    previous_meeting_outcome: str | None = _resolve_with_precedence(
-        explicit_outcome, inferred_outcome, None,
-    )
-
-    # --- Build decision risks -------------------------------------------------
-    risks = list(_STAGE_RISKS.get(meeting_stage, []))
-    outcome_for_risks = previous_meeting_outcome or "no_previous_meeting"
-    if outcome_for_risks in _OUTCOME_RISK_MODIFIERS:
-        risks.extend(_OUTCOME_RISK_MODIFIERS[outcome_for_risks])
-
-    # --- Derive research_mode -------------------------------------------------
-    research_mode = _resolve_research_mode(
-        meeting_stage, relationship_status, inference_confidence,
-    )
-
-    # --- Build the context dict -----------------------------------------------
-    engagement_context: dict[str, Any] = {
-        "interaction_stage": meeting_stage,
-        "relationship_status": relationship_status,
-        "conversation_mode": _CONVERSATION_MODES.get(meeting_stage, "exploratory"),
-        "stage_objective": _STAGE_OBJECTIVES.get(meeting_stage, ""),
-        "recommended_tone": _resolve_tone(meeting_stage, normalized_seniority),
-        "decision_risks": risks,
-        "next_step_pressure": _NEXT_STEP_PRESSURE.get(meeting_stage, "low"),
-        "continuity_context": _build_continuity_context(
-            previous_meeting_outcome, meeting_notes_summary,
-        ),
-        "research_mode": research_mode,
+def empty_context() -> dict[str, Any]:
+    """Placeholder until this node runs: a first introduction with nothing known."""
+    return {
+        "interaction_stage": "first_intro",
+        "relationship_status": None,
+        "conversation_mode": "exploratory",
+        "stage_objective": "",
+        "recommended_tone": "",
+        "decision_risks": [],
+        "next_step_pressure": "low",
+        "continuity_context": None,
+        "research_mode": "full",
     }
 
-    return {"engagement_context": engagement_context}
+
+def run(state: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the engagement fields and return ``engagement_context``."""
+    inference = state.get("engagement_inference", {})
+    stage = _first_known(state.get("meeting_stage"), inference.get("inferred_meeting_stage"), "first_intro")
+    relationship = _first_known(
+        state.get("relationship_status"),
+        inference.get("inferred_relationship_status"),
+        _DEFAULT_RELATIONSHIP.get(stage, "prospect"),
+    )
+    previous_outcome = _first_known(
+        state.get("previous_meeting_outcome"), inference.get("inferred_previous_meeting_outcome")
+    )
+
+    risks = list(_STAGE_RISKS.get(stage, []))
+    risks += _OUTCOME_RISK_MODIFIERS.get(previous_outcome or "no_previous_meeting", [])
+
+    return {
+        "engagement_context": {
+            "interaction_stage": stage,
+            "relationship_status": relationship,
+            "conversation_mode": _CONVERSATION_MODES.get(stage, "exploratory"),
+            "stage_objective": _STAGE_OBJECTIVES.get(stage, ""),
+            "recommended_tone": _resolve_tone(stage, state.get("normalized_seniority")),
+            "decision_risks": risks,
+            "next_step_pressure": _NEXT_STEP_PRESSURE.get(stage, "low"),
+            "continuity_context": _continuity(previous_outcome, state.get("meeting_notes_summary")),
+            "research_mode": _research_mode(stage, relationship, inference.get("confidence")),
+        }
+    }

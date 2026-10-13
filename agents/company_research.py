@@ -1,30 +1,15 @@
-"""Company Research Agent — LLM-assisted fact extraction.
-
-Reads ``company_name``, ``domain``, and ``research_plan`` from state.
-Runs the standard company-level Tavily queries plus any supplementary
-queries from the research plan.  Feeds retrieved text to an LLM that
-extracts a structured company profile.
-
-Ownership:  ``company_profile`` only.
-"""
+"""Company research: search the web, then extract a structured profile of the company."""
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agents.evidence import evidence_block, gather_evidence
 from core.utils import build_company_queries
 from services.llm_client import structured_extract
-from services.tavily_client import SearchResponse, TavilySearchClient
 
-logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Pydantic schema for the LLM's structured output
-# ---------------------------------------------------------------------------
 
 class CompanyProfile(BaseModel):
     """Structured company profile extracted from retrieved web text.
@@ -60,10 +45,6 @@ class CompanyProfile(BaseModel):
     )
 
 
-# ---------------------------------------------------------------------------
-# System prompt
-# ---------------------------------------------------------------------------
-
 _SYSTEM_PROMPT = """\
 You are a company-research analyst.  You will receive text snippets retrieved
 from the web about a specific company.
@@ -80,105 +61,43 @@ Rules:
 """
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+def empty_profile() -> dict[str, Any]:
+    return {**CompanyProfile().model_dump(), "sources": []}
 
-def _collect_evidence(
-    company_name: str,
-    domain: str,
-    research_plan: dict[str, Any],
-) -> tuple[list[str], list[str]]:
-    """Run Tavily queries and return (evidence_snippets, source_urls)."""
-    try:
-        client = TavilySearchClient()
-    except OSError as exc:
-        logger.warning("Tavily client init failed: %s", exc)
-        return [], []
-
-    # Standard company queries from spec
-    queries = build_company_queries(company_name, domain)
-
-    # Supplementary queries from the research planner
-    plan_queries: list[str] = research_plan.get("tavily_queries", [])
-    queries.extend(plan_queries)
-
-    responses: list[SearchResponse] = client.search_batch(queries)
-
-    snippets: list[str] = []
-    urls: list[str] = []
-    seen_urls: set[str] = set()
-
-    for resp in responses:
-        if not resp.ok:
-            continue
-        for hit in resp.results:
-            snippets.append(f"[{hit.title}] {hit.content}")
-            if hit.url and hit.url not in seen_urls:
-                seen_urls.add(hit.url)
-                urls.append(hit.url)
-
-    return snippets, urls
-
-
-def _empty_profile() -> dict[str, Any]:
-    """Return a valid but empty company_profile dict."""
-    return CompanyProfile().model_dump()
-
-
-# ---------------------------------------------------------------------------
-# Public entry-point
-# ---------------------------------------------------------------------------
 
 def run(state: dict[str, Any]) -> dict[str, Any]:
-    """Run company research and return a ``company_profile`` update."""
-
-    company_name: str = state.get("company_name", "")
-    domain: str = state.get("domain", "")
-    research_plan: dict[str, Any] = state.get("research_plan", {})
-    new_errors: list[str] = []
-
+    """Research the company and return ``company_profile``, with the URLs it is based on."""
+    company_name = state.get("company_name", "")
+    domain = state.get("domain", "")
     if not company_name:
-        new_errors.append("company_research: company_name is empty, skipping.")
         return {
-            "company_profile": _empty_profile() | {"sources": []},
-            "errors": new_errors,
+            "company_profile": empty_profile(),
+            "errors": ["company_research: company_name is empty, skipping."],
         }
 
-    # --- 1. Gather evidence via Tavily ----------------------------------------
-    snippets, source_urls = _collect_evidence(company_name, domain, research_plan)
-
-    if not snippets:
-        new_errors.append("company_research: no evidence retrieved from Tavily.")
-        return {
-            "company_profile": _empty_profile() | {"sources": source_urls},
-            "errors": new_errors,
-        }
-
-    # --- 2. Ask the LLM to extract a structured profile -----------------------
-    evidence_block = "\n\n".join(snippets[:30])   # cap context window usage
-    user_prompt = (
-        f"Company: {company_name}\n"
-        f"Domain: {domain}\n\n"
-        f"--- Evidence ---\n{evidence_block}\n--- End evidence ---\n\n"
-        "Extract the company profile from the evidence above."
+    plan_queries = state.get("research_plan", {}).get("tavily_queries", [])
+    snippets, sources = gather_evidence(
+        build_company_queries(company_name, domain) + plan_queries, cite_urls=False
     )
+    if not snippets:
+        return {
+            "company_profile": {**empty_profile(), "sources": sources},
+            "errors": ["company_research: no evidence retrieved from Tavily."],
+        }
 
     profile = structured_extract(
         system_prompt=_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
+        user_prompt=(
+            f"Company: {company_name}\n"
+            f"Domain: {domain}\n\n"
+            f"{evidence_block(snippets, 30)}\n\n"
+            "Extract the company profile from the evidence above."
+        ),
         response_model=CompanyProfile,
     )
-
     if profile is None:
-        new_errors.append("company_research: LLM extraction failed, returning sparse profile.")
         return {
-            "company_profile": _empty_profile() | {"sources": source_urls},
-            "errors": new_errors,
+            "company_profile": {**empty_profile(), "sources": sources},
+            "errors": ["company_research: LLM extraction failed, returning sparse profile."],
         }
-
-    # --- 3. Assemble output (add sources — not owned by the LLM) --------------
-    result = profile.model_dump()
-    result["sources"] = source_urls
-
-    return {"company_profile": result}
+    return {"company_profile": {**profile.model_dump(), "sources": sources}}

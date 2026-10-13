@@ -1,25 +1,8 @@
-"""Meeting Intake Agent — LLM-powered free-text-to-structured-fields parser.
+"""Meeting intake: turn a free-text description of a meeting into the pipeline's input fields.
 
-This agent is a **pre-workflow** layer.  It is called *before* the main
-LangGraph pipeline.  Its job is to convert a free-text meeting description
-into the structured fields that the existing workflow expects.
-
-Typical flow::
-
-    1. User provides raw free text  (e.g. "Second meeting with Stripe CFO…")
-    2. Caller invokes  ``meeting_intake_agent.run(raw_text)``
-    3. Agent returns:
-       - extracted structured fields  (company_name, domain, …)
-       - list of important fields still missing
-       - list of fields inferred with low confidence
-       - a human-readable confirmation summary
-    4. Future CLI/UI shows confirmation, lets user edit/fill gaps
-    5. Caller feeds the final structured dict to  ``app.invoke({…})``
-
-The agent does NOT write to BriefingState directly.  It returns a plain
-dict that the caller merges into the workflow input.
-
-Ownership:  standalone pre-processing — not a LangGraph node.
+Runs before the graph, not inside it. The result says which important fields are still
+missing and which values the model was unsure about, so the UI can ask the user to check
+them. Guesses that would mislead the pipeline are dropped rather than passed on.
 """
 
 from __future__ import annotations
@@ -29,14 +12,46 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from core.state import (
+    INPUT_FIELDS,
+    VALID_MEETING_STAGES,
+    VALID_MEETING_TYPES,
+    VALID_PREVIOUS_OUTCOMES,
+    VALID_RELATIONSHIP_STATUSES,
+)
 from services.llm_client import structured_extract
 
 logger = logging.getLogger(__name__)
 
+# Fields the pipeline needs, and fields that make the brief noticeably better.
+_REQUIRED = {
+    "company_name": "Company name",
+    "domain": "Company domain",
+    "meeting_type": "Meeting type",
+    "stakeholder_role": "Stakeholder role",
+    "meeting_goal": "Meeting goal",
+}
+_RECOMMENDED = {"meeting_stage": "Meeting stage", "relationship_status": "Relationship status"}
 
-# ---------------------------------------------------------------------------
-# Pydantic schema for LLM output
-# ---------------------------------------------------------------------------
+_ENUM_VALUES = {
+    "meeting_type": VALID_MEETING_TYPES,
+    "meeting_stage": VALID_MEETING_STAGES,
+    "relationship_status": VALID_RELATIONSHIP_STATUSES,
+    "previous_meeting_outcome": VALID_PREVIOUS_OUTCOMES,
+}
+_ENGAGEMENT_FIELDS = ("meeting_stage", "relationship_status", "previous_meeting_outcome")
+
+# engagement_type is free text, but common phrasings map to a known lens.
+_KNOWN_ENGAGEMENT_TYPES = frozenset({"sales", "consulting", "interview", "partnership", "investing", "recruiting"})
+_ENGAGEMENT_TYPE_ALIASES = {
+    "sale": "sales", "selling": "sales", "pitch": "sales",
+    "business development": "sales", "bd": "sales",
+    "consult": "consulting", "advisory": "consulting", "strategy": "consulting",
+    "hiring": "recruiting", "recruitment": "recruiting",
+    "investment": "investing", "venture": "investing", "vc": "investing",
+    "job interview": "interview", "candidate": "interview",
+}
+
 
 class LowConfidenceField(BaseModel):
     """A single field that was extracted but with low confidence."""
@@ -230,10 +245,6 @@ class MeetingIntakeResult(BaseModel):
     )
 
 
-# ---------------------------------------------------------------------------
-# System prompt
-# ---------------------------------------------------------------------------
-
 _SYSTEM_PROMPT = """\
 You are a meeting-context extraction assistant.  You will receive a
 free-text description of an upcoming business meeting.  Your task is to
@@ -297,7 +308,9 @@ STRICT RULES:
 10. CONFIRMATION SUMMARY.
     Write a concise human-readable summary addressed to the user.
     Clearly state what you understood, what you could not determine,
-    and what you are uncertain about.
+    and what you are uncertain about.  When user-side context is
+    extracted, mention it briefly: "You are approaching this as a
+    [engagement_type] meeting from [user_company]."
 
 11. STAKEHOLDER ROLE.
     If a contact_title is extracted (e.g. "Head of Accounting"), also
@@ -326,244 +339,87 @@ STRICT RULES:
     These are OPTIONAL — only extract what is clearly stated or
     conservatively inferable.  Mark as low confidence when inferred.
     Do NOT confuse the user's company/role with the contact's company/role.
-
-13. CONFIRMATION SUMMARY (updated).
-    When user-side context is extracted, mention it briefly in the
-    summary: "You are approaching this as a [engagement_type] meeting
-    from [user_company]."
 """
 
 
-# ---------------------------------------------------------------------------
-# Important workflow fields for missing-fields detection
-# ---------------------------------------------------------------------------
-
-# These are the fields the main workflow requires or strongly benefits from.
-# If any of these are null after intake, they are reported as missing.
-_IMPORTANT_FIELDS: list[tuple[str, str]] = [
-    ("company_name", "Company name"),
-    ("domain", "Company domain"),
-    ("meeting_type", "Meeting type"),
-    ("stakeholder_role", "Stakeholder role"),
-    ("meeting_goal", "Meeting goal"),
-]
-
-# Optional but highly useful fields.
-_RECOMMENDED_FIELDS: list[tuple[str, str]] = [
-    ("meeting_stage", "Meeting stage"),
-    ("relationship_status", "Relationship status"),
-]
+def _is_blank(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
-# ---------------------------------------------------------------------------
-# Public entry-point
-# ---------------------------------------------------------------------------
+def _missing(fields: dict[str, Any]) -> list[str]:
+    missing = [label for key, label in _REQUIRED.items() if _is_blank(fields.get(key))]
+    missing += [f"{label} (recommended)" for key, label in _RECOMMENDED.items() if _is_blank(fields.get(key))]
+    return missing
+
+
+def _workflow_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    """The pipeline's input fields; the required text ones are never None."""
+    return {key: (fields.get(key) or "") if key in _REQUIRED else fields.get(key) for key in INPUT_FIELDS}
+
+
+def _result(raw_text: str, fields: dict[str, Any], low_confidence: list[dict[str, str]], summary: str) -> dict[str, Any]:
+    return {
+        **_workflow_fields(fields),
+        "raw_meeting_context": raw_text,
+        "intake_missing_fields": _missing(fields),
+        "intake_low_confidence_fields": low_confidence,
+        "intake_confirmation_summary": summary,
+    }
+
+
+def _normalise(extracted: dict[str, Any]) -> None:
+    """Drop enum values the pipeline does not know, and tidy engagement_type and the role."""
+    for key, allowed in _ENUM_VALUES.items():
+        if extracted.get(key) and extracted[key] not in allowed:
+            extracted[key] = None
+
+    engagement_type = (extracted.get("engagement_type") or "").strip().lower()
+    if engagement_type and engagement_type not in _KNOWN_ENGAGEMENT_TYPES:
+        extracted["engagement_type"] = _ENGAGEMENT_TYPE_ALIASES.get(engagement_type, extracted["engagement_type"])
+
+    if not extracted.get("stakeholder_role") and extracted.get("contact_title"):
+        extracted["stakeholder_role"] = extracted["contact_title"]
+
+
+def _drop_shaky_guesses(extracted: dict[str, Any], raw_text: str) -> list[dict[str, str]]:
+    """Null the low-confidence values that would mislead the pipeline; return the flagged fields.
+
+    A wrong domain would steer every web search, so a guessed domain is dropped, unless the
+    user wrote it themselves (small models sometimes flag stated values). Guessed engagement
+    fields are left to the engagement-inference node, which sees more context.
+    """
+    flagged = [
+        {"field": item["field_name"], "value": item["extracted_value"], "reason": item["reason"]}
+        for item in extracted["low_confidence_fields"]
+    ]
+    domain = extracted.get("domain")
+    if domain and domain.lower() in raw_text.lower():
+        flagged = [item for item in flagged if item["field"] != "domain"]
+
+    flagged_fields = {item["field"] for item in flagged}
+    for key in ("domain", *_ENGAGEMENT_FIELDS):
+        if key in flagged_fields and extracted.get(key):
+            logger.info("Dropping low-confidence %s = %r", key, extracted[key])
+            extracted[key] = None
+    return flagged
+
 
 def run(raw_meeting_context: str) -> dict[str, Any]:
-    """Parse free-text meeting context into structured workflow fields.
-
-    Parameters
-    ----------
-    raw_meeting_context:
-        A free-text description of the upcoming meeting.  Can range from
-        one sentence to several paragraphs.
-
-    Returns
-    -------
-    dict with keys:
-        - All extracted workflow fields (company_name, domain, … etc.)
-          Each is a string or None.
-        - ``raw_meeting_context``: the original text (preserved for audit)
-        - ``intake_missing_fields``: list[str] of important fields still null
-        - ``intake_low_confidence_fields``: list[dict] with field/value/reason
-        - ``intake_confirmation_summary``: human-readable summary string
-    """
-
+    """Parse a meeting description into the pipeline's input fields plus review metadata."""
     if not raw_meeting_context or not raw_meeting_context.strip():
-        return _empty_result(raw_meeting_context or "")
+        return _result(raw_meeting_context or "", {}, [], "No meeting context was provided.")
 
     result = structured_extract(
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=raw_meeting_context.strip(),
         response_model=MeetingIntakeResult,
     )
-
     if result is None:
         logger.warning("meeting_intake_agent: LLM extraction failed.")
-        return _empty_result(
-            raw_meeting_context,
-            error="LLM extraction failed — please provide structured fields manually.",
-        )
+        summary = "LLM extraction failed — please provide structured fields manually."
+        return _result(raw_meeting_context, {}, [], summary)
 
-    # --- Build the output dict ------------------------------------------------
     extracted = result.model_dump()
-
-    # Sanitise enum fields against known values.
-    from core.state import (
-        VALID_MEETING_STAGES,
-        VALID_MEETING_TYPES,
-        VALID_PREVIOUS_OUTCOMES,
-        VALID_RELATIONSHIP_STATUSES,
-    )
-
-    if extracted.get("meeting_type") and extracted["meeting_type"] not in VALID_MEETING_TYPES:
-        extracted["meeting_type"] = None
-    if extracted.get("meeting_stage") and extracted["meeting_stage"] not in VALID_MEETING_STAGES:
-        extracted["meeting_stage"] = None
-    if extracted.get("relationship_status") and extracted["relationship_status"] not in VALID_RELATIONSHIP_STATUSES:
-        extracted["relationship_status"] = None
-    if extracted.get("previous_meeting_outcome") and extracted["previous_meeting_outcome"] not in VALID_PREVIOUS_OUTCOMES:
-        extracted["previous_meeting_outcome"] = None
-
-    # Soft-normalise engagement_type to known values when close enough.
-    _KNOWN_ENGAGEMENT_TYPES = {
-        "sales", "consulting", "interview", "partnership",
-        "investing", "recruiting",
-    }
-    _ENGAGEMENT_TYPE_ALIASES: dict[str, str] = {
-        "sale": "sales", "selling": "sales", "pitch": "sales",
-        "business development": "sales", "bd": "sales",
-        "consult": "consulting", "advisory": "consulting",
-        "strategy": "consulting",
-        "hiring": "recruiting", "recruitment": "recruiting",
-        "investment": "investing", "venture": "investing", "vc": "investing",
-        "job interview": "interview", "candidate": "interview",
-    }
-    raw_et = (extracted.get("engagement_type") or "").strip().lower()
-    if raw_et and raw_et not in _KNOWN_ENGAGEMENT_TYPES:
-        normalized_et = _ENGAGEMENT_TYPE_ALIASES.get(raw_et)
-        if normalized_et:
-            extracted["engagement_type"] = normalized_et
-        # else: leave free-text value as-is — downstream agents handle it
-
-    # Stakeholder role fallback: if stakeholder_role is empty but contact_title
-    # is present, use contact_title as stakeholder_role.
-    if not extracted.get("stakeholder_role") and extracted.get("contact_title"):
-        extracted["stakeholder_role"] = extracted["contact_title"]
-
-    # --- Format low-confidence fields -----------------------------------------
-    low_confidence: list[dict[str, str]] = []
-    low_confidence_names: set[str] = set()
-    for lc in extracted.get("low_confidence_fields", []):
-        if isinstance(lc, dict):
-            fname = lc.get("field_name", "")
-            low_confidence.append({
-                "field": fname,
-                "value": lc.get("extracted_value", ""),
-                "reason": lc.get("reason", ""),
-            })
-            low_confidence_names.add(fname)
-
-    # --- A domain written verbatim in the user's text is not a guess ---------
-    # Small models sometimes flag explicitly stated values as low-confidence.
-    stated_domain = extracted.get("domain")
-    if (
-        "domain" in low_confidence_names
-        and stated_domain
-        and stated_domain.lower() in raw_meeting_context.lower()
-    ):
-        low_confidence = [lc for lc in low_confidence if lc["field"] != "domain"]
-        low_confidence_names.discard("domain")
-
-    # --- Null out low-confidence domain (avoid poisoning research queries) ----
-    if "domain" in low_confidence_names and extracted.get("domain"):
-        logger.info(
-            "meeting_intake_agent: nulling low-confidence domain '%s'",
-            extracted["domain"],
-        )
-        extracted["domain"] = None
-
-    # --- Null out low-confidence engagement fields ----------------------------
-    # These fields should be handled by engagement_inference_agent which has
-    # richer context.  Letting a shaky intake guess masquerade as explicit user
-    # input would bypass the inference layer entirely.
-    _ENGAGEMENT_FIELDS = ("meeting_stage", "relationship_status", "previous_meeting_outcome")
-    for ef in _ENGAGEMENT_FIELDS:
-        if ef in low_confidence_names and extracted.get(ef):
-            logger.info(
-                "meeting_intake_agent: nulling low-confidence engagement field '%s' = '%s'",
-                ef, extracted[ef],
-            )
-            extracted[ef] = None
-
-    # --- Compute missing fields -----------------------------------------------
-    missing: list[str] = []
-    for field_key, field_label in _IMPORTANT_FIELDS:
-        val = extracted.get(field_key)
-        if val is None or (isinstance(val, str) and not val.strip()):
-            missing.append(field_label)
-
-    for field_key, field_label in _RECOMMENDED_FIELDS:
-        val = extracted.get(field_key)
-        if val is None or (isinstance(val, str) and not val.strip()):
-            missing.append(f"{field_label} (recommended)")
-
-    # --- Assemble final output ------------------------------------------------
-    # Extract only the workflow-compatible fields (drop LLM metadata fields).
-    workflow_fields = {
-        "company_name": extracted.get("company_name") or "",
-        "domain": extracted.get("domain") or "",
-        "contact_name": extracted.get("contact_name"),
-        "contact_title": extracted.get("contact_title"),
-        "stakeholder_role": extracted.get("stakeholder_role") or "",
-        "meeting_goal": extracted.get("meeting_goal") or "",
-        "meeting_type": extracted.get("meeting_type") or "",
-        "meeting_stage": extracted.get("meeting_stage"),
-        "relationship_status": extracted.get("relationship_status"),
-        "previous_meeting_outcome": extracted.get("previous_meeting_outcome"),
-        "meeting_notes_summary": extracted.get("meeting_notes_summary"),
-        # User-side context
-        "user_role": extracted.get("user_role"),
-        "user_company": extracted.get("user_company"),
-        "user_function": extracted.get("user_function"),
-        "engagement_type": extracted.get("engagement_type"),
-        "desired_outcome": extracted.get("desired_outcome"),
-        "success_definition": extracted.get("success_definition"),
-    }
-
-    return {
-        **workflow_fields,
-        "raw_meeting_context": raw_meeting_context,
-        "intake_missing_fields": missing,
-        "intake_low_confidence_fields": low_confidence,
-        "intake_confirmation_summary": extracted.get("confirmation_summary", ""),
-    }
-
-
-def _empty_result(
-    raw_meeting_context: str,
-    error: str | None = None,
-) -> dict[str, Any]:
-    """Return a valid but empty intake result."""
-    summary = error or "No meeting context was provided."
-    return {
-        "company_name": "",
-        "domain": "",
-        "contact_name": None,
-        "contact_title": None,
-        "stakeholder_role": "",
-        "meeting_goal": "",
-        "meeting_type": "",
-        "meeting_stage": None,
-        "relationship_status": None,
-        "previous_meeting_outcome": None,
-        "meeting_notes_summary": None,
-        "user_role": None,
-        "user_company": None,
-        "user_function": None,
-        "engagement_type": None,
-        "desired_outcome": None,
-        "success_definition": None,
-        "raw_meeting_context": raw_meeting_context,
-        "intake_missing_fields": [
-            "Company name",
-            "Company domain",
-            "Meeting type",
-            "Stakeholder role",
-            "Meeting goal",
-            "Meeting stage (recommended)",
-            "Relationship status (recommended)",
-        ],
-        "intake_low_confidence_fields": [],
-        "intake_confirmation_summary": summary,
-    }
+    _normalise(extracted)
+    low_confidence = _drop_shaky_guesses(extracted, raw_meeting_context)
+    return _result(raw_meeting_context, extracted, low_confidence, extracted["confirmation_summary"])

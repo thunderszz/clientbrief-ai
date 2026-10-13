@@ -23,6 +23,7 @@ from api.quota import DailyQuota
 from api.runner import HEARTBEAT, stream_pipeline
 from api.schemas import Credentials, IntakeRequest, RunRequest
 from core.pipeline import PIPELINE_EDGES, PIPELINE_NODES
+from core.state import INPUT_FIELDS
 from services.llm_client import LLMSettings, settings_from_env, use_llm_settings
 from services.providers import public_presets
 
@@ -30,25 +31,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEMO_DIR = PROJECT_ROOT / "demo"
 WEB_DIST = PROJECT_ROOT / "web" / "dist"
 
-_INTAKE_FIELDS = (
-    "company_name",
-    "domain",
-    "meeting_type",
-    "stakeholder_role",
-    "meeting_goal",
-    "contact_name",
-    "contact_title",
-    "meeting_stage",
-    "relationship_status",
-    "previous_meeting_outcome",
-    "meeting_notes_summary",
-    "user_role",
-    "user_company",
-    "user_function",
-    "engagement_type",
-    "desired_outcome",
-    "success_definition",
-)
 
 _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -178,7 +160,7 @@ def create_app(
                 return run_intake(request.text)
 
         raw = await run_in_threadpool(work)
-        fields = {key: raw.get(key) for key in _INTAKE_FIELDS}
+        fields = {key: raw.get(key) for key in INPUT_FIELDS}
         return {
             "ok": bool(fields["company_name"] or fields["meeting_goal"] or fields["stakeholder_role"]),
             "fields": fields,
