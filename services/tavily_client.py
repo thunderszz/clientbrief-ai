@@ -80,7 +80,9 @@ class TavilySearchClient:
             return SearchResponse(query=query, error=str(exc))
 
         results = [
-            SearchResult(title=r.get("title", ""), url=r.get("url", ""), content=r.get("content", ""))
+            SearchResult(
+                title=r.get("title", ""), url=r.get("url", ""), content=r.get("content", "")
+            )
             for r in raw.get("results", [])
         ]
         return SearchResponse(query=query, results=results)

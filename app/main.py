@@ -71,10 +71,12 @@ def _prompt_fill_missing(fields: dict, missing: list[str]) -> dict:
     if not required_missing:
         return fields
 
-    console.print(Panel(
-        "[yellow]Some required fields couldn't be extracted. Please fill them in:[/yellow]",
-        border_style="yellow",
-    ))
+    console.print(
+        Panel(
+            "[yellow]Some required fields couldn't be extracted. Please fill them in:[/yellow]",
+            border_style="yellow",
+        )
+    )
     key_for_label = {label: key for key, label, _ in _FIELDS}
     for label in required_missing:
         key = key_for_label.get(label)
@@ -96,18 +98,24 @@ def _prompt_confirm_low_confidence(fields: dict, low_confidence: list[dict]) -> 
     if not low_confidence:
         return fields
 
-    console.print(Panel(
-        "[yellow]I extracted the following fields but I'm not fully confident. "
-        "Please confirm or correct:[/yellow]",
-        border_style="yellow",
-    ))
+    console.print(
+        Panel(
+            "[yellow]I extracted the following fields but I'm not fully confident. "
+            "Please confirm or correct:[/yellow]",
+            border_style="yellow",
+        )
+    )
     for item in low_confidence:
         field, value = item.get("field", ""), item.get("value", "")
         console.print(
             f"\n  [bold]{field}[/bold] = [cyan]{value}[/cyan]\n"
             f"  [dim]Reason for uncertainty: {item.get('reason', '')}[/dim]"
         )
-        if not Confirm.ask(f"  Accept [cyan]{value}[/cyan] for [bold]{field}[/bold]?", console=console, default=True):
+        if not Confirm.ask(
+            f"  Accept [cyan]{value}[/cyan] for [bold]{field}[/bold]?",
+            console=console,
+            default=True,
+        ):
             # An empty answer clears the field, which then counts as missing.
             fields[field] = _ask(f"  Enter correct value for {field}", optional=True)
     return fields
@@ -117,13 +125,17 @@ def _prompt_edit_any(fields: dict) -> dict:
     console.print("")
     console.print(Rule("[dim]Optional additions[/dim]"))
     console.print("[dim]If anything important is missing or wrong, you can correct it now.[/dim]\n")
-    if not Confirm.ask("  Do you want to review or change any other field?", console=console, default=False):
+    if not Confirm.ask(
+        "  Do you want to review or change any other field?", console=console, default=False
+    ):
         return fields
 
     for key, label, required in _FIELDS:
         if key == "meeting_type":
             console.print(f"  [dim]Options: {_MEETING_TYPE_HINT}[/dim]")
-        value = Prompt.ask(f"  [bold]{label}[/bold]", default=fields.get(key) or "", console=console)
+        value = Prompt.ask(
+            f"  [bold]{label}[/bold]", default=fields.get(key) or "", console=console
+        )
         if value.strip():
             fields[key] = value.strip()
         elif not required:
@@ -199,12 +211,14 @@ def main() -> None:
 
     load_dotenv()
 
-    console.print(Panel.fit(
-        "[bold white]ClientBrief AI[/bold white]\n"
-        "[dim]Pre-meeting intelligence — powered by Gemini + Tavily[/dim]",
-        border_style="bright_blue",
-        padding=(1, 4),
-    ))
+    console.print(
+        Panel.fit(
+            "[bold white]ClientBrief AI[/bold white]\n"
+            "[dim]Pre-meeting intelligence — powered by Gemini + Tavily[/dim]",
+            border_style="bright_blue",
+            padding=(1, 4),
+        )
+    )
     console.print(
         "\n[bold]Describe your upcoming meeting in plain language.[/bold]\n"
         "[dim]Include as much as you can — the more context, the better the brief.\n\n"
@@ -227,7 +241,9 @@ def main() -> None:
 
     console.print(Rule("[bold]What I understood[/bold]"))
     if fields.get("intake_confirmation_summary"):
-        console.print(Panel(f"[dim]{fields['intake_confirmation_summary']}[/dim]", border_style="dim"))
+        console.print(
+            Panel(f"[dim]{fields['intake_confirmation_summary']}[/dim]", border_style="dim")
+        )
     _show_extracted_table(fields)
 
     fields = _prompt_fill_missing(fields, fields.get("intake_missing_fields", []))
@@ -236,7 +252,9 @@ def main() -> None:
 
     still_missing = [key for key in _REQUIRED_KEYS if not fields.get(key)]
     if still_missing:
-        _exit(f"\nCannot generate brief — still missing required fields: {', '.join(still_missing)}")
+        _exit(
+            f"\nCannot generate brief — still missing required fields: {', '.join(still_missing)}"
+        )
 
     console.print("")
     console.print(Rule("[bold]Generating brief[/bold]"))
@@ -254,7 +272,13 @@ def main() -> None:
     reliability = result.get("brief_reliability", 0)
     colour = "green" if reliability >= 4 else "yellow" if reliability >= 2 else "red"
     console.print("")
-    console.print(Panel(f"[bold {colour}]{_reliability_line(result)}[/bold {colour}]", border_style=colour, expand=False))
+    console.print(
+        Panel(
+            f"[bold {colour}]{_reliability_line(result)}[/bold {colour}]",
+            border_style=colour,
+            expand=False,
+        )
+    )
 
     final_brief = result.get("final_brief", "")
     if not final_brief:
@@ -263,9 +287,17 @@ def main() -> None:
     console.print(Rule("[bold]Your Pre-Meeting Brief[/bold]"))
     console.print(Markdown(final_brief))
 
-    saved_path = _save_brief(result.get("company_name") or fields.get("company_name", "company"), final_brief)
+    saved_path = _save_brief(
+        result.get("company_name") or fields.get("company_name", "company"), final_brief
+    )
     console.print("")
-    console.print(Panel(f"[green]Brief saved to:[/green] [bold]{saved_path}[/bold]", border_style="green", expand=False))
+    console.print(
+        Panel(
+            f"[green]Brief saved to:[/green] [bold]{saved_path}[/bold]",
+            border_style="green",
+            expand=False,
+        )
+    )
 
 
 if __name__ == "__main__":

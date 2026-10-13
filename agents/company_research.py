@@ -18,9 +18,7 @@ class CompanyProfile(BaseModel):
     Use null / empty lists when evidence is insufficient.
     """
 
-    industry: str | None = Field(
-        None, description="Primary industry the company operates in."
-    )
+    industry: str | None = Field(None, description="Primary industry the company operates in.")
     business_model: str | None = Field(
         None, description="How the company makes money (e.g. SaaS, marketplace, manufacturing)."
     )

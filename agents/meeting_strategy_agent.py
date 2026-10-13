@@ -128,7 +128,9 @@ STRICT RULES:
 
 
 def empty_strategy() -> dict[str, Any]:
-    return MeetingStrategy(executive_summary="", opening_angle="", suggested_next_step="").model_dump()
+    return MeetingStrategy(
+        executive_summary="", opening_angle="", suggested_next_step=""
+    ).model_dump()
 
 
 def _build_user_prompt(state: dict[str, Any]) -> str:
@@ -185,9 +187,16 @@ def _build_user_prompt(state: dict[str, Any]) -> str:
 
     person = state.get("person_profile", {})
     if has_reliable_match(person):
-        parts += ["", "=== Person Profile (reliable — use to personalise) ===", *person_profile_lines(person)]
+        parts += [
+            "",
+            "=== Person Profile (reliable — use to personalise) ===",
+            *person_profile_lines(person),
+        ]
     else:
-        parts += ["", "No reliable person profile — tailor strategy to company and audience context only."]
+        parts += [
+            "",
+            "No reliable person profile — tailor strategy to company and audience context only.",
+        ]
     return "\n".join(parts)
 
 

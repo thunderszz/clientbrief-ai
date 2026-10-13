@@ -23,7 +23,8 @@ def gather_evidence(queries: list[str], *, cite_urls: bool = True) -> tuple[list
 
     hits = [hit for response in client.search_batch(queries) for hit in response.results]
     snippets = [
-        (f"[source: {hit.url}] " if cite_urls else "") + f"[{hit.title}] {hit.content}" for hit in hits
+        (f"[source: {hit.url}] " if cite_urls else "") + f"[{hit.title}] {hit.content}"
+        for hit in hits
     ]
     urls = list(dict.fromkeys(hit.url for hit in hits if hit.url))
     return snippets, urls

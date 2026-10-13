@@ -130,7 +130,9 @@ def settings_from_env() -> LLMSettings:
         if not api_key:
             raise OSError("LLM_API_KEY is not set (required for LLM_PROVIDER=openai_compatible).")
         if not model_fast:
-            raise OSError("LLM_MODEL_FAST is not set (required for LLM_PROVIDER=openai_compatible).")
+            raise OSError(
+                "LLM_MODEL_FAST is not set (required for LLM_PROVIDER=openai_compatible)."
+            )
         return LLMSettings(
             provider="openai_compatible",
             api_key=api_key,
@@ -212,7 +214,12 @@ def _openai_compatible_generate(
 ) -> str:
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.api_key, base_url=settings.base_url, max_retries=0, timeout=_REQUEST_TIMEOUT_S)
+    client = OpenAI(
+        api_key=settings.api_key,
+        base_url=settings.base_url,
+        max_retries=0,
+        timeout=_REQUEST_TIMEOUT_S,
+    )
     schema_instruction = (
         "\n\nRespond with a single JSON object that conforms to this JSON schema. "
         "Output JSON only, no prose and no code fences.\n" + json.dumps(schema)

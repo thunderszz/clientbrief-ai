@@ -13,8 +13,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify CFO-level priorities and recent financial disclosures",
         ],
         "focus_areas": [
-            "financial reporting", "margin trends", "cost optimisation",
-            "budgeting and forecasting", "audit and compliance",
+            "financial reporting",
+            "margin trends",
+            "cost optimisation",
+            "budgeting and forecasting",
+            "audit and compliance",
         ],
         "evidence_needed": [
             "Recent earnings or annual-report highlights",
@@ -28,8 +31,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify accounting team structure signals",
         ],
         "focus_areas": [
-            "month-end close", "reconciliation", "internal controls",
-            "regulatory compliance", "accounting systems",
+            "month-end close",
+            "reconciliation",
+            "internal controls",
+            "regulatory compliance",
+            "accounting systems",
         ],
         "evidence_needed": [
             "Regulatory filings or compliance mentions",
@@ -42,8 +48,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify scalability or modernisation challenges",
         ],
         "focus_areas": [
-            "tech stack", "platform scalability", "developer productivity",
-            "technical debt", "cloud migration",
+            "tech stack",
+            "platform scalability",
+            "developer productivity",
+            "technical debt",
+            "cloud migration",
         ],
         "evidence_needed": [
             "Job postings or blog posts revealing tech stack",
@@ -56,7 +65,9 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify product-market fit challenges or pivots",
         ],
         "focus_areas": [
-            "product roadmap", "feature prioritisation", "user analytics",
+            "product roadmap",
+            "feature prioritisation",
+            "user analytics",
             "competitive product positioning",
         ],
         "evidence_needed": [
@@ -70,8 +81,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify pipeline or conversion pain points",
         ],
         "focus_areas": [
-            "sales pipeline", "CRM and RevOps tooling", "conversion rates",
-            "sales enablement", "channel strategy",
+            "sales pipeline",
+            "CRM and RevOps tooling",
+            "conversion rates",
+            "sales enablement",
+            "channel strategy",
         ],
         "evidence_needed": [
             "Public revenue or growth figures",
@@ -84,8 +98,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify M&A activity or expansion signals",
         ],
         "focus_areas": [
-            "corporate strategy", "market expansion", "competitive positioning",
-            "M&A and partnerships", "growth vectors",
+            "corporate strategy",
+            "market expansion",
+            "competitive positioning",
+            "M&A and partnerships",
+            "growth vectors",
         ],
         "evidence_needed": [
             "Strategic announcements or investor presentations",
@@ -98,8 +115,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify integration, governance, or security challenges",
         ],
         "focus_areas": [
-            "data governance", "system integration", "data quality",
-            "cybersecurity posture", "cloud and infrastructure",
+            "data governance",
+            "system integration",
+            "data quality",
+            "cybersecurity posture",
+            "cloud and infrastructure",
         ],
         "evidence_needed": [
             "Known technology partnerships or platform choices",
@@ -112,8 +132,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify efficiency or visibility gaps",
         ],
         "focus_areas": [
-            "process efficiency", "supply chain", "execution visibility",
-            "operational KPIs", "cross-functional coordination",
+            "process efficiency",
+            "supply chain",
+            "execution visibility",
+            "operational KPIs",
+            "cross-functional coordination",
         ],
         "evidence_needed": [
             "Operational footprint (plants, warehouses, regions)",
@@ -126,8 +149,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand change-management maturity",
         ],
         "focus_areas": [
-            "ERP transformation", "change management", "adoption metrics",
-            "programme governance", "digital transformation roadmap",
+            "ERP transformation",
+            "change management",
+            "adoption metrics",
+            "programme governance",
+            "digital transformation roadmap",
         ],
         "evidence_needed": [
             "Public references to transformation projects",
@@ -140,15 +166,17 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify conversation-relevant angles for a first meeting",
         ],
         "focus_areas": [
-            "business model", "competitive landscape", "recent news",
-            "leadership changes", "industry trends",
+            "business model",
+            "competitive landscape",
+            "recent news",
+            "leadership changes",
+            "industry trends",
         ],
         "evidence_needed": [
             "Company overview from credible sources",
             "Recent leadership or strategy announcements",
         ],
     },
-
     # sales_discovery
     ("sales_discovery", "finance"): {
         "research_objectives": [
@@ -156,8 +184,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand current financial-process pain points",
         ],
         "focus_areas": [
-            "budgeting tools", "financial consolidation", "reporting automation",
-            "treasury management", "cost reduction initiatives",
+            "budgeting tools",
+            "financial consolidation",
+            "reporting automation",
+            "treasury management",
+            "cost reduction initiatives",
         ],
         "evidence_needed": [
             "Technology spend signals or vendor mentions",
@@ -170,7 +201,9 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand close-process bottlenecks",
         ],
         "focus_areas": [
-            "close automation", "reconciliation tools", "compliance requirements",
+            "close automation",
+            "reconciliation tools",
+            "compliance requirements",
             "audit readiness",
         ],
         "evidence_needed": [
@@ -184,8 +217,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand current engineering bottlenecks",
         ],
         "focus_areas": [
-            "developer experience", "CI/CD pipeline", "observability",
-            "platform engineering", "cloud costs",
+            "developer experience",
+            "CI/CD pipeline",
+            "observability",
+            "platform engineering",
+            "cloud costs",
         ],
         "evidence_needed": [
             "Tech-blog posts on infrastructure challenges",
@@ -198,8 +234,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand product-team maturity and process gaps",
         ],
         "focus_areas": [
-            "product analytics", "experimentation", "roadmap visibility",
-            "feature-flagging", "customer feedback loops",
+            "product analytics",
+            "experimentation",
+            "roadmap visibility",
+            "feature-flagging",
+            "customer feedback loops",
         ],
         "evidence_needed": [
             "Product-team job postings or conference talks",
@@ -212,8 +251,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand quota and pipeline challenges",
         ],
         "focus_areas": [
-            "CRM effectiveness", "pipeline analytics", "sales automation",
-            "lead scoring", "revenue operations",
+            "CRM effectiveness",
+            "pipeline analytics",
+            "sales automation",
+            "lead scoring",
+            "revenue operations",
         ],
         "evidence_needed": [
             "Mentions of CRM vendors or RevOps tools",
@@ -226,8 +268,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand competitive threats driving urgency",
         ],
         "focus_areas": [
-            "strategic investments", "market entry", "competitive response",
-            "innovation initiatives", "board-level priorities",
+            "strategic investments",
+            "market entry",
+            "competitive response",
+            "innovation initiatives",
+            "board-level priorities",
         ],
         "evidence_needed": [
             "Investor presentations or earnings-call transcripts",
@@ -240,8 +285,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand data-platform maturity and gaps",
         ],
         "focus_areas": [
-            "IT modernisation", "data platform", "vendor consolidation",
-            "security compliance", "integration backlog",
+            "IT modernisation",
+            "data platform",
+            "vendor consolidation",
+            "security compliance",
+            "integration backlog",
         ],
         "evidence_needed": [
             "Technology partnership announcements",
@@ -254,8 +302,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand supply-chain or logistics pain points",
         ],
         "focus_areas": [
-            "process automation", "supply-chain visibility", "inventory optimisation",
-            "operational analytics", "vendor management",
+            "process automation",
+            "supply-chain visibility",
+            "inventory optimisation",
+            "operational analytics",
+            "vendor management",
         ],
         "evidence_needed": [
             "Operational KPIs in public filings",
@@ -268,8 +319,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Understand adoption and change-management readiness",
         ],
         "focus_areas": [
-            "programme status", "vendor selection signals", "rollout challenges",
-            "user adoption", "training and enablement",
+            "programme status",
+            "vendor selection signals",
+            "rollout challenges",
+            "user adoption",
+            "training and enablement",
         ],
         "evidence_needed": [
             "RFP or vendor-selection press mentions",
@@ -282,15 +336,17 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Build a business-context map to position the offering",
         ],
         "focus_areas": [
-            "company growth trajectory", "recent challenges", "technology landscape",
-            "competitive pressure", "hiring trends",
+            "company growth trajectory",
+            "recent challenges",
+            "technology landscape",
+            "competitive pressure",
+            "hiring trends",
         ],
         "evidence_needed": [
             "Recent funding, revenue, or headcount signals",
             "Job postings indicating new initiatives",
         ],
     },
-
     # account_review
     ("account_review", "finance"): {
         "research_objectives": [
@@ -298,8 +354,10 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Surface new pain points or expansion opportunities",
         ],
         "focus_areas": [
-            "new regulatory requirements", "financial system changes",
-            "leadership turnover", "budget cycle timing",
+            "new regulatory requirements",
+            "financial system changes",
+            "leadership turnover",
+            "budget cycle timing",
         ],
         "evidence_needed": [
             "Quarterly or annual report updates",
@@ -312,8 +370,10 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Surface compliance or audit-related news",
         ],
         "focus_areas": [
-            "regulatory changes", "restatement or audit findings",
-            "system migrations", "outsourcing shifts",
+            "regulatory changes",
+            "restatement or audit findings",
+            "system migrations",
+            "outsourcing shifts",
         ],
         "evidence_needed": [
             "Regulatory-body notices or filings",
@@ -326,8 +386,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify new technical initiatives since last meeting",
         ],
         "focus_areas": [
-            "new tech adoption", "platform migration", "team scaling",
-            "reliability incidents", "open-source contributions",
+            "new tech adoption",
+            "platform migration",
+            "team scaling",
+            "reliability incidents",
+            "open-source contributions",
         ],
         "evidence_needed": [
             "Engineering blog updates",
@@ -340,8 +403,10 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify new user feedback or competitive pressure",
         ],
         "focus_areas": [
-            "new feature releases", "product-strategy pivots",
-            "user sentiment", "competitive product moves",
+            "new feature releases",
+            "product-strategy pivots",
+            "user sentiment",
+            "competitive product moves",
         ],
         "evidence_needed": [
             "Product changelog or release notes",
@@ -354,8 +419,10 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify new revenue targets or channel shifts",
         ],
         "focus_areas": [
-            "GTM strategy changes", "sales-team restructuring",
-            "new market entry", "partnership announcements",
+            "GTM strategy changes",
+            "sales-team restructuring",
+            "new market entry",
+            "partnership announcements",
         ],
         "evidence_needed": [
             "Revenue or ARR growth figures",
@@ -368,8 +435,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Refresh competitive-landscape context",
         ],
         "focus_areas": [
-            "M&A activity", "new market entry", "competitive response",
-            "board or investor changes", "strategic partnerships",
+            "M&A activity",
+            "new market entry",
+            "competitive response",
+            "board or investor changes",
+            "strategic partnerships",
         ],
         "evidence_needed": [
             "Investor updates or SEC filings",
@@ -382,8 +452,10 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify data-governance or security incidents",
         ],
         "focus_areas": [
-            "new vendor implementations", "security incidents",
-            "data-governance initiatives", "cloud-migration progress",
+            "new vendor implementations",
+            "security incidents",
+            "data-governance initiatives",
+            "cloud-migration progress",
         ],
         "evidence_needed": [
             "Technology partnership updates",
@@ -396,8 +468,10 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify supply-chain or process disruptions",
         ],
         "focus_areas": [
-            "operational restructuring", "supply-chain disruptions",
-            "new facility or expansion", "process-improvement outcomes",
+            "operational restructuring",
+            "supply-chain disruptions",
+            "new facility or expansion",
+            "process-improvement outcomes",
         ],
         "evidence_needed": [
             "Operational KPI changes in filings",
@@ -410,8 +484,11 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Identify phase-two or expansion opportunities",
         ],
         "focus_areas": [
-            "programme milestones", "adoption metrics", "change fatigue signals",
-            "vendor satisfaction", "scope changes",
+            "programme milestones",
+            "adoption metrics",
+            "change fatigue signals",
+            "vendor satisfaction",
+            "scope changes",
         ],
         "evidence_needed": [
             "Programme-status references in press or analyst reports",
@@ -424,8 +501,10 @@ PLANS: dict[tuple[str, str], dict[str, list[str]]] = {
             "Surface any new strategic, financial, or organisational signals",
         ],
         "focus_areas": [
-            "leadership changes", "financial performance",
-            "strategic announcements", "market sentiment",
+            "leadership changes",
+            "financial performance",
+            "strategic announcements",
+            "market sentiment",
         ],
         "evidence_needed": [
             "Latest press releases or earnings highlights",
@@ -440,7 +519,9 @@ DEFAULT_PLAN: dict[str, list[str]] = {
         "Build a foundational understanding of the company and its context",
     ],
     "focus_areas": [
-        "business model", "recent news", "industry trends",
+        "business model",
+        "recent news",
+        "industry trends",
     ],
     "evidence_needed": [
         "Company overview from credible sources",

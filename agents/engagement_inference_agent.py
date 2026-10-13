@@ -128,13 +128,19 @@ def _build_user_prompt(state: dict[str, Any]) -> str:
     if state.get("contact_title"):
         parts.append(f"Contact title: {state['contact_title']}")
     notes = state.get("meeting_notes_summary")
-    parts.append(f"Meeting notes from prior interaction: {notes}" if notes else "Meeting notes: (none provided)")
+    parts.append(
+        f"Meeting notes from prior interaction: {notes}"
+        if notes
+        else "Meeting notes: (none provided)"
+    )
 
     parts += ["", "--- Engagement field status ---"]
     for field in _FIELDS:
         value = state.get(field)
         parts.append(
-            f"{field}: PROVIDED = {value}  (do NOT re-infer)" if value else f"{field}: MISSING — please infer"
+            f"{field}: PROVIDED = {value}  (do NOT re-infer)"
+            if value
+            else f"{field}: MISSING — please infer"
         )
     parts.append("--- End engagement field status ---")
     return "\n".join(parts)

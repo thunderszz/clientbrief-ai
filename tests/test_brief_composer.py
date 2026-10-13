@@ -31,7 +31,9 @@ def test_composer_writes_reliability_report():
     report = out["reliability_report"]
     assert 0 < report["score"] <= 100
     assert out["brief_reliability"] == report["rating"]
-    assert f"**Brief reliability:** {report['rating']}/5 ({report['score']}/100)" in out["final_brief"]
+    assert (
+        f"**Brief reliability:** {report['rating']}/5 ({report['score']}/100)" in out["final_brief"]
+    )
 
 
 def test_composer_sources_are_aggregated():

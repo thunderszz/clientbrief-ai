@@ -37,7 +37,9 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
     engagement = state.get("engagement_context", {})
     research_mode = engagement.get("research_mode", "full")
 
-    plan = PLANS.get((meeting_type, function)) or PLANS.get((meeting_type, "general")) or DEFAULT_PLAN
+    plan = (
+        PLANS.get((meeting_type, function)) or PLANS.get((meeting_type, "general")) or DEFAULT_PLAN
+    )
     overlay = STAGE_OVERLAYS.get(engagement.get("interaction_stage", "first_intro"), {})
     focus_areas = plan["focus_areas"] + overlay.get("extra_focus", [])
 
@@ -48,7 +50,8 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "research_plan": {
-            "research_objectives": plan["research_objectives"] + overlay.get("extra_objectives", []),
+            "research_objectives": plan["research_objectives"]
+            + overlay.get("extra_objectives", []),
             "focus_areas": focus_areas,
             "evidence_needed": list(plan["evidence_needed"]),
             "tavily_queries": _trim_for_mode(queries, research_mode, company_name),

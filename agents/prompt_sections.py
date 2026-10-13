@@ -8,7 +8,11 @@ from typing import Any
 
 def company_profile_lines(profile: Mapping[str, Any]) -> list[str]:
     """``key: value`` lines for the company profile fields that are filled in."""
-    lines = [f"{key}: {profile[key]}" for key in ("industry", "business_model", "company_positioning") if profile.get(key)]
+    lines = [
+        f"{key}: {profile[key]}"
+        for key in ("industry", "business_model", "company_positioning")
+        if profile.get(key)
+    ]
     for key in ("products", "customer_segments", "geographies", "complexity_signals"):
         items = profile.get(key, [])
         if items:
@@ -46,13 +50,19 @@ def audience_lines(audience: Mapping[str, Any], *, with_style: bool = False) -> 
         if audience.get("communication_style"):
             lines.append(f"Communication style: {audience['communication_style']}")
         if audience.get("potential_sensitivities"):
-            lines.append(f"Potential sensitivities: {', '.join(audience['potential_sensitivities'])}")
+            lines.append(
+                f"Potential sensitivities: {', '.join(audience['potential_sensitivities'])}"
+            )
     return lines
 
 
 def person_profile_lines(profile: Mapping[str, Any]) -> list[str]:
     """``key: value`` lines for a matched contact. Callers check the match is reliable first."""
-    lines = [f"{key}: {profile[key]}" for key in ("name", "title", "department", "background_summary") if profile.get(key)]
+    lines = [
+        f"{key}: {profile[key]}"
+        for key in ("name", "title", "department", "background_summary")
+        if profile.get(key)
+    ]
     if profile.get("public_signals"):
         lines.append(f"Public signals: {', '.join(profile['public_signals'][:5])}")
     return lines

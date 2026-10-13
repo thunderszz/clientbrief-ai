@@ -174,16 +174,12 @@ def validate_inputs(
         )
     if meeting_type not in VALID_MEETING_TYPES:
         allowed = ", ".join(sorted(VALID_MEETING_TYPES))
-        errors.append(
-            f"meeting_type '{meeting_type}' is not recognized. Allowed: {allowed}."
-        )
+        errors.append(f"meeting_type '{meeting_type}' is not recognized. Allowed: {allowed}.")
     if not stakeholder_role or not stakeholder_role.strip():
         errors.append("stakeholder_role is required and must be non-empty.")
     if meeting_stage is not None and meeting_stage not in VALID_MEETING_STAGES:
         allowed = ", ".join(sorted(VALID_MEETING_STAGES))
-        errors.append(
-            f"meeting_stage '{meeting_stage}' is not recognized. Allowed: {allowed}."
-        )
+        errors.append(f"meeting_stage '{meeting_stage}' is not recognized. Allowed: {allowed}.")
     return errors
 
 
@@ -251,12 +247,12 @@ def deduplicate_signals(signals: list[dict]) -> list[dict]:
 _DATE_FORMATS: list[str] = [
     "%Y-%m-%d",
     "%Y/%m/%d",
-    "%B %d, %Y",       # January 15, 2025
-    "%b %d, %Y",       # Jan 15, 2025
-    "%d %B %Y",        # 15 January 2025
-    "%d %b %Y",        # 15 Jan 2025
-    "%B %Y",           # January 2025
-    "%b %Y",           # Jan 2025
+    "%B %d, %Y",  # January 15, 2025
+    "%b %d, %Y",  # Jan 15, 2025
+    "%d %B %Y",  # 15 January 2025
+    "%d %b %Y",  # 15 Jan 2025
+    "%B %Y",  # January 2025
+    "%b %Y",  # Jan 2025
     "%Y-%m",
     "%Y/%m",
     "%m/%d/%Y",

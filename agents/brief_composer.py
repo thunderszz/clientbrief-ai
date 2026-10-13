@@ -63,7 +63,10 @@ def _your_position(state: dict[str, Any]) -> str:
     """The user's side of the meeting; omitted entirely when they said nothing about it."""
     who = " ".join(
         part
-        for part in (state.get("user_role"), f"at {state['user_company']}" if state.get("user_company") else None)
+        for part in (
+            state.get("user_role"),
+            f"at {state['user_company']}" if state.get("user_company") else None,
+        )
         if part
     )
     lines = [f"\n**You:** {who}"] if who else []
@@ -89,7 +92,11 @@ def _company_snapshot(state: dict[str, Any]) -> str:
     profile = state.get("company_profile", {})
     lines = [
         f"- **{label}:** {profile[key]}"
-        for key, label in (("industry", "Industry"), ("business_model", "Business model"), ("company_positioning", "Positioning"))
+        for key, label in (
+            ("industry", "Industry"),
+            ("business_model", "Business model"),
+            ("company_positioning", "Positioning"),
+        )
         if profile.get(key)
     ]
     for key, label in (
@@ -107,12 +114,18 @@ def _signals(state: dict[str, Any]) -> str:
     lines = []
     for number, signal in enumerate(state.get("external_signals", []), 1):
         date = f" ({signal['date']})" if signal.get("date") else ""
-        lines.append(f"{number}. **[{signal.get('signal_type', 'unknown')}]{date}** {signal.get('description', '')}")
+        lines.append(
+            f"{number}. **[{signal.get('signal_type', 'unknown')}]{date}** {signal.get('description', '')}"
+        )
         if signal.get("implication"):
             lines.append(f"   - *Implication:* {signal['implication']}")
         if signal.get("confidence"):
             lines.append(f"   - *Confidence:* {signal['confidence']}")
-    return _section("Recent Strategic Signals", [""] + lines if lines else [], "No recent strategic signals found.")
+    return _section(
+        "Recent Strategic Signals",
+        [""] + lines if lines else [],
+        "No recent strategic signals found.",
+    )
 
 
 def _contact(state: dict[str, Any]) -> str:
@@ -125,7 +138,11 @@ def _contact(state: dict[str, Any]) -> str:
 
     if has_reliable_match(profile):
         lines.append(f"\n**Profile confidence:** {profile['match_confidence']}")
-        for key, label in (("department", "Department"), ("tenure_hint", "Tenure"), ("background_summary", "Background")):
+        for key, label in (
+            ("department", "Department"),
+            ("tenure_hint", "Tenure"),
+            ("background_summary", "Background"),
+        ):
             if profile.get(key):
                 lines.append(f"- **{label}:** {profile[key]}")
         if profile.get("public_signals"):
@@ -193,7 +210,9 @@ def _pain_points(state: dict[str, Any]) -> str:
     if hypotheses:
         lines.append("\n**Hypotheses:**")
         for item in hypotheses:
-            lines.append(f"- [HYPOTHESIS — {item.get('confidence', '?')}] {item.get('hypothesis', '')}")
+            lines.append(
+                f"- [HYPOTHESIS — {item.get('confidence', '?')}] {item.get('hypothesis', '')}"
+            )
             lines += [f"  - {evidence}" for evidence in item.get("supporting_evidence", [])]
     return _section("Likely Pain Points", lines, "No pain-point analysis available.")
 
@@ -201,14 +220,20 @@ def _pain_points(state: dict[str, Any]) -> str:
 def _questions(state: dict[str, Any]) -> str:
     questions = state.get("meeting_strategy", {}).get("recommended_questions", [])
     lines = [f"{number}. {question}" for number, question in enumerate(questions, 1)]
-    return _section("Suggested Meeting Questions", [""] + lines if lines else [], "No recommended questions available.")
+    return _section(
+        "Suggested Meeting Questions",
+        [""] + lines if lines else [],
+        "No recommended questions available.",
+    )
 
 
 def _items_to_validate(state: dict[str, Any]) -> str:
     items = state.get("pain_point_hypotheses", {}).get("items_to_validate", [])
     lines = [f"- [ ] {item}" for item in items]
     return _section(
-        "Items to Validate During Meeting", [""] + lines if lines else [], "No specific validation items identified."
+        "Items to Validate During Meeting",
+        [""] + lines if lines else [],
+        "No specific validation items identified.",
     )
 
 
@@ -231,7 +256,9 @@ def _prep_notes(state: dict[str, Any]) -> str:
 def _sources_footer(sources: list[str]) -> str:
     if not sources:
         return "*Sources: none*"
-    return "\n".join(["---", "", "*Sources:*", "", *(f"{n}. {url}" for n, url in enumerate(sources, 1))])
+    return "\n".join(
+        ["---", "", "*Sources:*", "", *(f"{n}. {url}" for n, url in enumerate(sources, 1))]
+    )
 
 
 def run(state: dict[str, Any]) -> dict[str, Any]:

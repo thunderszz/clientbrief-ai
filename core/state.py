@@ -22,7 +22,9 @@ VALID_MEETING_STAGES = frozenset(
     }
 )
 
-VALID_RELATIONSHIP_STATUSES = frozenset({"prospect", "active_opportunity", "client", "former_client"})
+VALID_RELATIONSHIP_STATUSES = frozenset(
+    {"prospect", "active_opportunity", "client", "former_client"}
+)
 
 VALID_PREVIOUS_OUTCOMES = frozenset({"positive", "neutral", "unclear", "no_previous_meeting"})
 

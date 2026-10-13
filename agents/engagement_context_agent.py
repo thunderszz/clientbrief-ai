@@ -11,13 +11,13 @@ from typing import Any
 
 # Conversation mode per meeting stage.
 _CONVERSATION_MODES: dict[str, str] = {
-    "first_intro":          "exploratory",
-    "discovery_followup":   "consultative",
-    "solution_discussion":  "solution_oriented",
-    "proposal_review":      "commercial",
-    "negotiation":          "commercial",
-    "client_kickoff":       "partnership",
-    "account_expansion":    "consultative",
+    "first_intro": "exploratory",
+    "discovery_followup": "consultative",
+    "solution_discussion": "solution_oriented",
+    "proposal_review": "commercial",
+    "negotiation": "commercial",
+    "client_kickoff": "partnership",
+    "account_expansion": "consultative",
 }
 
 # What the meeting should achieve at each stage.
@@ -31,36 +31,31 @@ _STAGE_OBJECTIVES: dict[str, str] = {
         "and validate initial hypotheses."
     ),
     "solution_discussion": (
-        "Align proposed solution to the stakeholder's requirements "
-        "and surface evaluation criteria."
+        "Align proposed solution to the stakeholder's requirements and surface evaluation criteria."
     ),
     "proposal_review": (
-        "Address concerns about the proposal, reinforce value, "
-        "and move toward a decision."
+        "Address concerns about the proposal, reinforce value, and move toward a decision."
     ),
     "negotiation": (
-        "Reach agreement on terms while preserving relationship quality "
-        "and deal value."
+        "Reach agreement on terms while preserving relationship quality and deal value."
     ),
     "client_kickoff": (
-        "Align on outcomes, ways of working, and immediate priorities "
-        "for the engagement."
+        "Align on outcomes, ways of working, and immediate priorities for the engagement."
     ),
     "account_expansion": (
-        "Surface new needs and demonstrate value from the existing "
-        "relationship to expand scope."
+        "Surface new needs and demonstrate value from the existing relationship to expand scope."
     ),
 }
 
 # Next-step pressure.
 _NEXT_STEP_PRESSURE: dict[str, str] = {
-    "first_intro":          "low",
-    "discovery_followup":   "low",
-    "solution_discussion":  "moderate",
-    "proposal_review":      "high",
-    "negotiation":          "high",
-    "client_kickoff":       "low",
-    "account_expansion":    "moderate",
+    "first_intro": "low",
+    "discovery_followup": "low",
+    "solution_discussion": "moderate",
+    "proposal_review": "high",
+    "negotiation": "high",
+    "client_kickoff": "low",
+    "account_expansion": "moderate",
 }
 
 # Decision risks per stage.
@@ -110,56 +105,56 @@ _OUTCOME_RISK_MODIFIERS: dict[str, list[str]] = {
 # Recommended tone per stage, refined by seniority where it matters.
 _TONE_TEMPLATES: dict[str, dict[str, str]] = {
     "first_intro": {
-        "_default":  "Curious and respectful — ask more than tell, demonstrate genuine interest in their challenges",
-        "c_level":   "Strategic and concise — lead with business impact, respect their time, avoid operational detail",
-        "vp":        "Strategic with depth — show understanding of their domain, balance big-picture and specifics",
+        "_default": "Curious and respectful — ask more than tell, demonstrate genuine interest in their challenges",
+        "c_level": "Strategic and concise — lead with business impact, respect their time, avoid operational detail",
+        "vp": "Strategic with depth — show understanding of their domain, balance big-picture and specifics",
     },
     "discovery_followup": {
-        "_default":  "Consultative and attentive — reference prior conversation, show you listened, go deeper",
-        "c_level":   "Executive and outcome-focused — connect prior discussion to business outcomes they care about",
+        "_default": "Consultative and attentive — reference prior conversation, show you listened, go deeper",
+        "c_level": "Executive and outcome-focused — connect prior discussion to business outcomes they care about",
     },
     "solution_discussion": {
-        "_default":  "Confident and collaborative — present solutions clearly while inviting input and adaptation",
-        "c_level":   "Outcome-driven and efficient — lead with value and results, keep technical detail for the team",
+        "_default": "Confident and collaborative — present solutions clearly while inviting input and adaptation",
+        "c_level": "Outcome-driven and efficient — lead with value and results, keep technical detail for the team",
     },
     "proposal_review": {
-        "_default":  "Professional and responsive — address concerns directly, reinforce value at every point",
-        "c_level":   "Commercial and strategic — frame the proposal in terms of business impact and risk reduction",
+        "_default": "Professional and responsive — address concerns directly, reinforce value at every point",
+        "c_level": "Commercial and strategic — frame the proposal in terms of business impact and risk reduction",
     },
     "negotiation": {
-        "_default":  "Firm but collaborative — seek mutual value, avoid positional bargaining",
-        "c_level":   "Direct and partnership-oriented — frame terms as aligned investment, not transactional cost",
+        "_default": "Firm but collaborative — seek mutual value, avoid positional bargaining",
+        "c_level": "Direct and partnership-oriented — frame terms as aligned investment, not transactional cost",
     },
     "client_kickoff": {
-        "_default":  "Energetic and structured — set expectations, build confidence, show preparation",
-        "c_level":   "Reassuring and outcome-focused — confirm strategic alignment, delegate operational detail",
+        "_default": "Energetic and structured — set expectations, build confidence, show preparation",
+        "c_level": "Reassuring and outcome-focused — confirm strategic alignment, delegate operational detail",
     },
     "account_expansion": {
-        "_default":  "Trusted-advisor mode — leverage relationship capital, lead with demonstrated results",
-        "c_level":   "Strategic and forward-looking — connect expansion to their evolving strategic priorities",
+        "_default": "Trusted-advisor mode — leverage relationship capital, lead with demonstrated results",
+        "c_level": "Strategic and forward-looking — connect expansion to their evolving strategic priorities",
     },
 }
 
 # Relationship to assume for each stage when it was neither stated nor inferred.
 _DEFAULT_RELATIONSHIP: dict[str, str] = {
-    "first_intro":          "prospect",
-    "discovery_followup":   "prospect",
-    "solution_discussion":  "active_opportunity",
-    "proposal_review":      "active_opportunity",
-    "negotiation":          "active_opportunity",
-    "client_kickoff":       "client",
-    "account_expansion":    "client",
+    "first_intro": "prospect",
+    "discovery_followup": "prospect",
+    "solution_discussion": "active_opportunity",
+    "proposal_review": "active_opportunity",
+    "negotiation": "active_opportunity",
+    "client_kickoff": "client",
+    "account_expansion": "client",
 }
 
 # How much baseline research each stage needs: full, light or update_only.
 _RESEARCH_MODE_TABLE: dict[str, str] = {
-    "first_intro":          "full",
-    "discovery_followup":   "light",
-    "solution_discussion":  "light",
-    "proposal_review":      "update_only",
-    "negotiation":          "update_only",
-    "client_kickoff":       "update_only",
-    "account_expansion":    "light",
+    "first_intro": "full",
+    "discovery_followup": "light",
+    "solution_discussion": "light",
+    "proposal_review": "update_only",
+    "negotiation": "update_only",
+    "client_kickoff": "update_only",
+    "account_expansion": "light",
 }
 
 
@@ -185,13 +180,17 @@ def _continuity(previous_outcome: str | None, notes: str | None) -> str | None:
     """One line about the last interaction, or None when there was none."""
     parts = []
     if previous_outcome and previous_outcome != "no_previous_meeting":
-        parts.append(_OUTCOME_SUMMARIES.get(previous_outcome, f"Previous outcome: {previous_outcome}."))
+        parts.append(
+            _OUTCOME_SUMMARIES.get(previous_outcome, f"Previous outcome: {previous_outcome}.")
+        )
     if notes and notes.strip():
         parts.append(f"Notes: {notes.strip()}")
     return " ".join(parts) or None
 
 
-def _research_mode(meeting_stage: str, relationship_status: str | None, confidence: str | None) -> str:
+def _research_mode(
+    meeting_stage: str, relationship_status: str | None, confidence: str | None
+) -> str:
     """How much baseline research to run. Former clients, and shaky guesses, get the full run."""
     if relationship_status == "former_client" or confidence == "low":
         return "full"
@@ -216,7 +215,9 @@ def empty_context() -> dict[str, Any]:
 def run(state: dict[str, Any]) -> dict[str, Any]:
     """Resolve the engagement fields and return ``engagement_context``."""
     inference = state.get("engagement_inference", {})
-    stage = _first_known(state.get("meeting_stage"), inference.get("inferred_meeting_stage"), "first_intro")
+    stage = _first_known(
+        state.get("meeting_stage"), inference.get("inferred_meeting_stage"), "first_intro"
+    )
     relationship = _first_known(
         state.get("relationship_status"),
         inference.get("inferred_relationship_status"),

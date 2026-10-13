@@ -253,6 +253,7 @@ def test_gemini_transport_sets_timeout(monkeypatch):
         def generate_content(self, **kwargs):
             class R:
                 text = '{"value": "ok"}'
+
             return R()
 
     class FakeClient:

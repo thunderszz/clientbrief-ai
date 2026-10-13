@@ -58,12 +58,8 @@ class PersonProfile(BaseModel):
             "'low' = ambiguous, conflicting, or no useful evidence."
         )
     )
-    name: str | None = Field(
-        None, description="Full name as it appears in the evidence."
-    )
-    title: str | None = Field(
-        None, description="Job title as found in the evidence."
-    )
+    name: str | None = Field(None, description="Full name as it appears in the evidence.")
+    title: str | None = Field(None, description="Job title as found in the evidence.")
     department: str | None = Field(
         None, description="Department or function (e.g. Engineering, Finance)."
     )
@@ -133,7 +129,9 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
 
     company_name = state.get("company_name", "")
     contact_title = state.get("contact_title")
-    snippets, sources = gather_evidence(build_person_queries(contact_name, company_name, contact_title))
+    snippets, sources = gather_evidence(
+        build_person_queries(contact_name, company_name, contact_title)
+    )
     name_only = {**empty_profile(), "name": contact_name, "sources": sources}
     if not snippets:
         error = f"person_research: no evidence found for '{contact_name}' at '{company_name}'."

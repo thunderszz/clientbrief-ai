@@ -25,9 +25,7 @@ from services.llm_client import Tier, structured_extract
 class Hypothesis(BaseModel):
     """A single pain-point hypothesis."""
 
-    hypothesis: str = Field(
-        description="A plausible business challenge the stakeholder may face."
-    )
+    hypothesis: str = Field(description="A plausible business challenge the stakeholder may face.")
     supporting_evidence: list[str] = Field(
         default_factory=list,
         description="Facts or inferences that support this hypothesis.",

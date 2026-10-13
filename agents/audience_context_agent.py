@@ -45,15 +45,51 @@ class AudienceContext(BaseModel):
 
 # Typical priorities for each function, given to the model as a starting point.
 _FUNCTION_PRIORITIES: dict[str, list[str]] = {
-    "finance": ["financial visibility", "forecasting accuracy", "margin control", "cost optimisation", "compliance"],
-    "accounting": ["close-process efficiency", "reconciliation accuracy", "internal controls", "regulatory compliance"],
-    "engineering": ["scalability", "system reliability", "technical debt reduction", "developer productivity"],
-    "product": ["roadmap execution", "feature prioritisation", "product analytics", "user retention"],
+    "finance": [
+        "financial visibility",
+        "forecasting accuracy",
+        "margin control",
+        "cost optimisation",
+        "compliance",
+    ],
+    "accounting": [
+        "close-process efficiency",
+        "reconciliation accuracy",
+        "internal controls",
+        "regulatory compliance",
+    ],
+    "engineering": [
+        "scalability",
+        "system reliability",
+        "technical debt reduction",
+        "developer productivity",
+    ],
+    "product": [
+        "roadmap execution",
+        "feature prioritisation",
+        "product analytics",
+        "user retention",
+    ],
     "sales": ["pipeline health", "conversion rates", "revenue predictability", "sales enablement"],
-    "strategy": ["growth trajectory", "market expansion", "competitive positioning", "M&A readiness"],
+    "strategy": [
+        "growth trajectory",
+        "market expansion",
+        "competitive positioning",
+        "M&A readiness",
+    ],
     "it_data": ["system integration", "data governance", "data quality", "security posture"],
-    "operations": ["process efficiency", "execution visibility", "cross-functional coordination", "supply chain resilience"],
-    "transformation": ["change management effectiveness", "adoption metrics", "rollout governance", "stakeholder alignment"],
+    "operations": [
+        "process efficiency",
+        "execution visibility",
+        "cross-functional coordination",
+        "supply chain resilience",
+    ],
+    "transformation": [
+        "change management effectiveness",
+        "adoption metrics",
+        "rollout governance",
+        "stakeholder alignment",
+    ],
     "general": ["business performance", "strategic alignment", "operational efficiency"],
 }
 
@@ -130,7 +166,11 @@ def _build_user_prompt(state: dict[str, Any]) -> str:
     parts.append("")
     if has_reliable_match(person):
         parts.append("--- Reliable person profile (use to personalise) ---")
-        for key, label in (("title", "Title"), ("department", "Department"), ("background_summary", "Background")):
+        for key, label in (
+            ("title", "Title"),
+            ("department", "Department"),
+            ("background_summary", "Background"),
+        ):
             if person.get(key):
                 parts.append(f"{label}: {person[key]}")
         if person.get("public_signals"):

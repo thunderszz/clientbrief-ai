@@ -225,7 +225,19 @@ def test_aggregate_sources_dedupes_in_order():
 
 @pytest.mark.parametrize(
     ("score", "rating"),
-    [(100, 5), (85, 5), (84, 4), (70, 4), (69, 3), (50, 3), (49, 2), (30, 2), (29, 1), (1, 1), (0, 0)],
+    [
+        (100, 5),
+        (85, 5),
+        (84, 4),
+        (70, 4),
+        (69, 3),
+        (50, 3),
+        (49, 2),
+        (30, 2),
+        (29, 1),
+        (1, 1),
+        (0, 0),
+    ],
 )
 def test_rating_thresholds(score, rating):
     assert rating_for(score) == rating

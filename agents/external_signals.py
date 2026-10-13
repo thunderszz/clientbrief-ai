@@ -46,9 +46,7 @@ class Signal(BaseModel):
             "'low' = mentioned but unverified."
         )
     )
-    source: str = Field(
-        description="URL of the primary source for this signal."
-    )
+    source: str = Field(description="URL of the primary source for this signal.")
     date: str | None = Field(
         None,
         description=(
@@ -96,12 +94,18 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
     """Search for recent news about the company and return ``external_signals``."""
     company_name = state.get("company_name", "")
     if not company_name:
-        return {"external_signals": [], "errors": ["external_signals: company_name is empty, skipping."]}
+        return {
+            "external_signals": [],
+            "errors": ["external_signals: company_name is empty, skipping."],
+        }
 
     plan_queries = state.get("research_plan", {}).get("tavily_queries", [])
     snippets, _ = gather_evidence(build_signal_queries(company_name, extra_queries=plan_queries))
     if not snippets:
-        return {"external_signals": [], "errors": ["external_signals: no evidence retrieved from Tavily."]}
+        return {
+            "external_signals": [],
+            "errors": ["external_signals: no evidence retrieved from Tavily."],
+        }
 
     result = structured_extract(
         system_prompt=_SYSTEM_PROMPT,
@@ -118,5 +122,7 @@ def run(state: dict[str, Any]) -> dict[str, Any]:
             "errors": ["external_signals: LLM extraction failed, returning empty signals."],
         }
 
-    signals = [{**signal.model_dump(), "date": normalize_date(signal.date)} for signal in result.signals]
+    signals = [
+        {**signal.model_dump(), "date": normalize_date(signal.date)} for signal in result.signals
+    ]
     return {"external_signals": deduplicate_signals(signals)}

@@ -39,7 +39,9 @@ def _default_graph():
     return app
 
 
-def iter_pipeline_events(workflow_input: dict[str, Any], graph: Any = None) -> Iterator[dict[str, Any]]:
+def iter_pipeline_events(
+    workflow_input: dict[str, Any], graph: Any = None
+) -> Iterator[dict[str, Any]]:
     """Run the pipeline synchronously, yielding UI events as nodes start and finish."""
     graph = graph or _default_graph()
     t0 = time.monotonic()
@@ -62,10 +64,20 @@ def iter_pipeline_events(workflow_input: dict[str, Any], graph: Any = None) -> I
                     continue
                 if "result" not in chunk and "error" not in chunk:
                     started[node] = now()
-                    yield {"type": "node_started", "t": started[node], "node": node, "label": NODE_LABELS[node]}
+                    yield {
+                        "type": "node_started",
+                        "t": started[node],
+                        "node": node,
+                        "label": NODE_LABELS[node],
+                    }
                 elif chunk.get("error"):
                     finished.add(node)
-                    yield {"type": "node_failed", "t": now(), "node": node, "label": NODE_LABELS[node]}
+                    yield {
+                        "type": "node_failed",
+                        "t": now(),
+                        "node": node,
+                        "label": NODE_LABELS[node],
+                    }
             elif mode == "updates":
                 for node, update in chunk.items():
                     if node not in NODE_LABELS:
@@ -89,7 +101,9 @@ def iter_pipeline_events(workflow_input: dict[str, Any], graph: Any = None) -> I
         for node in running:
             yield {"type": "node_failed", "t": now(), "node": node, "label": NODE_LABELS[node]}
         where = ", ".join(NODE_LABELS[node] for node in running)
-        message = f"The pipeline stopped in {where}." if where else "The pipeline stopped unexpectedly."
+        message = (
+            f"The pipeline stopped in {where}." if where else "The pipeline stopped unexpectedly."
+        )
         yield {"type": "error", "t": now(), "message": message}
         return
 

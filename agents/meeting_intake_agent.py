@@ -42,26 +42,33 @@ _ENUM_VALUES = {
 _ENGAGEMENT_FIELDS = ("meeting_stage", "relationship_status", "previous_meeting_outcome")
 
 # engagement_type is free text, but common phrasings map to a known lens.
-_KNOWN_ENGAGEMENT_TYPES = frozenset({"sales", "consulting", "interview", "partnership", "investing", "recruiting"})
+_KNOWN_ENGAGEMENT_TYPES = frozenset(
+    {"sales", "consulting", "interview", "partnership", "investing", "recruiting"}
+)
 _ENGAGEMENT_TYPE_ALIASES = {
-    "sale": "sales", "selling": "sales", "pitch": "sales",
-    "business development": "sales", "bd": "sales",
-    "consult": "consulting", "advisory": "consulting", "strategy": "consulting",
-    "hiring": "recruiting", "recruitment": "recruiting",
-    "investment": "investing", "venture": "investing", "vc": "investing",
-    "job interview": "interview", "candidate": "interview",
+    "sale": "sales",
+    "selling": "sales",
+    "pitch": "sales",
+    "business development": "sales",
+    "bd": "sales",
+    "consult": "consulting",
+    "advisory": "consulting",
+    "strategy": "consulting",
+    "hiring": "recruiting",
+    "recruitment": "recruiting",
+    "investment": "investing",
+    "venture": "investing",
+    "vc": "investing",
+    "job interview": "interview",
+    "candidate": "interview",
 }
 
 
 class LowConfidenceField(BaseModel):
     """A single field that was extracted but with low confidence."""
 
-    field_name: str = Field(
-        description="Name of the field (e.g. 'domain', 'meeting_stage')."
-    )
-    extracted_value: str = Field(
-        description="The value that was extracted or inferred."
-    )
+    field_name: str = Field(description="Name of the field (e.g. 'domain', 'meeting_stage').")
+    extracted_value: str = Field(description="The value that was extracted or inferred.")
     reason: str = Field(
         description="Why confidence is low (e.g. 'guessed from company name', 'ambiguous context')."
     )
@@ -348,16 +355,25 @@ def _is_blank(value: Any) -> bool:
 
 def _missing(fields: dict[str, Any]) -> list[str]:
     missing = [label for key, label in _REQUIRED.items() if _is_blank(fields.get(key))]
-    missing += [f"{label} (recommended)" for key, label in _RECOMMENDED.items() if _is_blank(fields.get(key))]
+    missing += [
+        f"{label} (recommended)"
+        for key, label in _RECOMMENDED.items()
+        if _is_blank(fields.get(key))
+    ]
     return missing
 
 
 def _workflow_fields(fields: dict[str, Any]) -> dict[str, Any]:
     """The pipeline's input fields; the required text ones are never None."""
-    return {key: (fields.get(key) or "") if key in _REQUIRED else fields.get(key) for key in INPUT_FIELDS}
+    return {
+        key: (fields.get(key) or "") if key in _REQUIRED else fields.get(key)
+        for key in INPUT_FIELDS
+    }
 
 
-def _result(raw_text: str, fields: dict[str, Any], low_confidence: list[dict[str, str]], summary: str) -> dict[str, Any]:
+def _result(
+    raw_text: str, fields: dict[str, Any], low_confidence: list[dict[str, str]], summary: str
+) -> dict[str, Any]:
     return {
         **_workflow_fields(fields),
         "raw_meeting_context": raw_text,
@@ -375,7 +391,9 @@ def _normalise(extracted: dict[str, Any]) -> None:
 
     engagement_type = (extracted.get("engagement_type") or "").strip().lower()
     if engagement_type and engagement_type not in _KNOWN_ENGAGEMENT_TYPES:
-        extracted["engagement_type"] = _ENGAGEMENT_TYPE_ALIASES.get(engagement_type, extracted["engagement_type"])
+        extracted["engagement_type"] = _ENGAGEMENT_TYPE_ALIASES.get(
+            engagement_type, extracted["engagement_type"]
+        )
 
     if not extracted.get("stakeholder_role") and extracted.get("contact_title"):
         extracted["stakeholder_role"] = extracted["contact_title"]
@@ -422,4 +440,6 @@ def run(raw_meeting_context: str) -> dict[str, Any]:
     extracted = result.model_dump()
     _normalise(extracted)
     low_confidence = _drop_shaky_guesses(extracted, raw_meeting_context)
-    return _result(raw_meeting_context, extracted, low_confidence, extracted["confirmation_summary"])
+    return _result(
+        raw_meeting_context, extracted, low_confidence, extracted["confirmation_summary"]
+    )

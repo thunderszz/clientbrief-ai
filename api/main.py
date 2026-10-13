@@ -104,7 +104,9 @@ def create_app(
         return {
             "pipeline": {"nodes": PIPELINE_NODES, "edges": PIPELINE_EDGES},
             "provider": server.provider if server else None,
-            "models": {"fast": server.model_fast, "reasoning": server.model_reasoning} if server else None,
+            "models": {"fast": server.model_fast, "reasoning": server.model_reasoning}
+            if server
+            else None,
             "server_runs": {"available": server_runs_available(), "remaining": quota.remaining},
             "providers": public_presets(),
         }
@@ -162,7 +164,9 @@ def create_app(
         raw = await run_in_threadpool(work)
         fields = {key: raw.get(key) for key in INPUT_FIELDS}
         return {
-            "ok": bool(fields["company_name"] or fields["meeting_goal"] or fields["stakeholder_role"]),
+            "ok": bool(
+                fields["company_name"] or fields["meeting_goal"] or fields["stakeholder_role"]
+            ),
             "fields": fields,
             "missing": raw.get("intake_missing_fields", []),
             "low_confidence": raw.get("intake_low_confidence_fields", []),
