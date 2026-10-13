@@ -9,7 +9,7 @@ interface Props {
   onOpenKeys: () => void;
 }
 
-export function Logo() {
+function Logo() {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" className="h-6 w-6">
       <rect x="5" y="3" width="22" height="26" rx="2" fill="currentColor" />
