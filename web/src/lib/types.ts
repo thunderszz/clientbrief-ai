@@ -38,11 +38,6 @@ export interface DemoSummary {
   duration_s: number;
 }
 
-export interface DemoDetail extends DemoSummary {
-  input_text: string;
-  intake: Record<string, unknown>;
-}
-
 export interface MeetingFields {
   company_name: string;
   domain: string;

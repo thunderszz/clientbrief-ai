@@ -76,7 +76,9 @@ def _parse_overrides(pairs: list[str]) -> dict[str, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--slug", required=True)
     parser.add_argument("--title", required=True)
     parser.add_argument("--subtitle", default="")
@@ -133,7 +135,9 @@ def main(argv: list[str] | None = None) -> int:
     path = DEMO_DIR / f"{args.slug}.json"
     path.write_text(json.dumps(record, indent=1, ensure_ascii=False), encoding="utf-8")
     score = events[-1]["result"]["reliability"]["score"]
-    print(f"Saved {path.relative_to(PROJECT_ROOT)} · {events[-1]['t']:.0f}s · reliability {score}/100")
+    print(
+        f"Saved {path.relative_to(PROJECT_ROOT)} · {events[-1]['t']:.0f}s · reliability {score}/100"
+    )
     return 0
 
 

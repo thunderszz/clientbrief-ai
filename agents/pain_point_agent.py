@@ -1,49 +1,31 @@
-"""Pain Point Hypothesis Agent — LLM reasoning for business-challenge synthesis.
+"""Pain points: what the stakeholder is likely struggling with, kept apart by certainty.
 
-Synthesises company profile, external signals, audience context,
-engagement context, and (if reliable) person profile into a structured set of:
-- **facts** — confirmed, source-grounded statements
-- **inferences** — reasoned conclusions that follow from facts
-- **hypotheses** — speculative but plausible pain points, each with
-  supporting evidence and a confidence level
-- **items_to_validate** — things the user should verify during the meeting
-
-The engagement context (interaction stage, conversation mode) influences
-*which* pain points are most relevant: early-stage meetings surface broad
-challenges; later-stage meetings focus on deal-relevant or solution-specific
-pain points.
-
-Person-specific details may influence hypotheses ONLY when
-``person_profile.match_confidence`` is ``"medium"`` or ``"high"``.
-
-Ownership:  ``pain_point_hypotheses`` only.
+Facts must come from the research, inferences must follow from facts, and hypotheses are
+guesses to test in the meeting, each with its evidence and a confidence level. The user's
+own context, when given, changes the angle of the analysis but never counts as evidence.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agents.person_research import has_reliable_match
+from agents.prompt_sections import (
+    audience_lines,
+    company_profile_lines,
+    person_profile_lines,
+    signals_section,
+    user_side_lines,
+)
 from services.llm_client import Tier, structured_extract
 
-logger = logging.getLogger(__name__)
-
-# Confidence values that permit using person-level details.
-_RELIABLE_CONFIDENCE = frozenset({"medium", "high"})
-
-
-# ---------------------------------------------------------------------------
-# Pydantic schemas
-# ---------------------------------------------------------------------------
 
 class Hypothesis(BaseModel):
     """A single pain-point hypothesis."""
 
-    hypothesis: str = Field(
-        description="A plausible business challenge the stakeholder may face."
-    )
+    hypothesis: str = Field(description="A plausible business challenge the stakeholder may face.")
     supporting_evidence: list[str] = Field(
         default_factory=list,
         description="Facts or inferences that support this hypothesis.",
@@ -87,10 +69,6 @@ class PainPointHypotheses(BaseModel):
     )
 
 
-# ---------------------------------------------------------------------------
-# System prompt
-# ---------------------------------------------------------------------------
-
 _SYSTEM_PROMPT = """\
 You are a business-challenge analyst preparing a pre-meeting brief.
 You will receive research about a company, recent strategic signals,
@@ -130,143 +108,59 @@ STRICT RULES:
      what the hiring function cares about — NOT commercial pain
    - partnership → emphasise strategic fit, complementary gaps
    - investing → emphasise market risk, growth friction, competitive threats
-   If user-side context is absent, ignore this rule and frame generically
-   as before.
+   If user-side context is absent, ignore this rule and frame generically.
 """
 
 
-def _empty_hypotheses() -> dict[str, Any]:
+def empty_hypotheses() -> dict[str, Any]:
     return PainPointHypotheses().model_dump()
 
 
-# ---------------------------------------------------------------------------
-# Build the user prompt
-# ---------------------------------------------------------------------------
-
 def _build_user_prompt(state: dict[str, Any]) -> str:
-    parts: list[str] = []
+    parts = ["=== Company Profile ===", *company_profile_lines(state.get("company_profile", {}))]
+    parts += signals_section(state.get("external_signals", []))
 
-    # Company profile
-    cp: dict[str, Any] = state.get("company_profile", {})
-    parts.append("=== Company Profile ===")
-    for key in ("industry", "business_model", "company_positioning"):
-        val = cp.get(key)
-        if val:
-            parts.append(f"{key}: {val}")
-    for key in ("products", "customer_segments", "geographies", "complexity_signals"):
-        items = cp.get(key, [])
-        if items:
-            parts.append(f"{key}: {', '.join(str(i) for i in items[:6])}")
+    audience = state.get("audience_context", {})
+    if audience.get("department"):
+        parts += ["", "=== Audience Context ===", *audience_lines(audience)]
 
-    # External signals
-    signals: list[dict] = state.get("external_signals", [])
-    if signals:
-        parts.append("")
-        parts.append("=== Recent Strategic Signals ===")
-        for i, sig in enumerate(signals[:10], 1):
-            date_str = f" ({sig['date']})" if sig.get("date") else ""
-            parts.append(
-                f"{i}. [{sig.get('signal_type', '?')}]{date_str} "
-                f"{sig.get('description', '')}  "
-                f"Implication: {sig.get('implication', 'n/a')}  "
-                f"(confidence: {sig.get('confidence', '?')})"
-            )
+    engagement = state.get("engagement_context", {})
+    if engagement.get("interaction_stage"):
+        parts += [
+            "",
+            "=== Engagement Context ===",
+            f"Interaction stage: {engagement['interaction_stage']}",
+            f"Conversation mode: {engagement.get('conversation_mode', 'exploratory')}",
+            f"Stage objective: {engagement.get('stage_objective', '')}",
+        ]
+        if engagement.get("decision_risks"):
+            parts.append(f"Decision risks: {'; '.join(engagement['decision_risks'])}")
+        if engagement.get("continuity_context"):
+            parts.append(f"Continuity context: {engagement['continuity_context']}")
+
+    person = state.get("person_profile", {})
+    if has_reliable_match(person):
+        parts += ["", "=== Person Profile (reliable — may use) ===", *person_profile_lines(person)]
     else:
-        parts.append("\nNo recent strategic signals available.")
+        parts += ["", "No reliable person profile — reason from company and function context only."]
 
-    # Audience context
-    ac: dict[str, Any] = state.get("audience_context", {})
-    if ac.get("department"):
-        parts.append("")
-        parts.append("=== Audience Context ===")
-        parts.append(f"Department: {ac.get('department', '')}")
-        parts.append(f"Seniority: {ac.get('role_seniority') or 'unknown'}")
-        priorities = ac.get("likely_priorities", [])
-        if priorities:
-            parts.append(f"Likely priorities: {', '.join(priorities)}")
-        topics = ac.get("relevant_topics", [])
-        if topics:
-            parts.append(f"Relevant topics: {', '.join(topics)}")
-
-    # Engagement context — stage, mode, risks
-    ec: dict[str, Any] = state.get("engagement_context", {})
-    if ec.get("interaction_stage"):
-        parts.append("")
-        parts.append("=== Engagement Context ===")
-        parts.append(f"Interaction stage: {ec['interaction_stage']}")
-        parts.append(f"Conversation mode: {ec.get('conversation_mode', 'exploratory')}")
-        parts.append(f"Stage objective: {ec.get('stage_objective', '')}")
-        risks = ec.get("decision_risks", [])
-        if risks:
-            parts.append(f"Decision risks: {'; '.join(risks)}")
-        continuity = ec.get("continuity_context")
-        if continuity:
-            parts.append(f"Continuity context: {continuity}")
-
-    # Person profile — gated on confidence
-    pp: dict[str, Any] = state.get("person_profile", {})
-    confidence = pp.get("match_confidence", "none")
-
-    if confidence in _RELIABLE_CONFIDENCE:
-        parts.append("")
-        parts.append("=== Person Profile (reliable — may use) ===")
-        for key in ("name", "title", "department", "background_summary"):
-            val = pp.get(key)
-            if val:
-                parts.append(f"{key}: {val}")
-        pub = pp.get("public_signals", [])
-        if pub:
-            parts.append(f"Public signals: {', '.join(pub[:5])}")
-    else:
-        parts.append("")
-        parts.append(
-            "No reliable person profile — reason from company and "
-            "function context only."
-        )
-
-    # User-side context — framing lens (not evidence)
-    _user_fields = {
-        "user_role": "User role",
-        "user_company": "User company",
-        "user_function": "User function",
-        "engagement_type": "Engagement type",
-        "meeting_goal": "Meeting goal",
-        "desired_outcome": "Desired outcome",
-        "success_definition": "Success definition",
-    }
-    user_lines = []
-    for key, label in _user_fields.items():
-        val = state.get(key)
-        if val:
-            user_lines.append(f"{label}: {val}")
-    if user_lines:
-        parts.append("")
-        parts.append("=== User-Side Context (framing lens — NOT evidence) ===")
-        parts.extend(user_lines)
-
+    user_side = user_side_lines(state, with_goal=True)
+    if user_side:
+        parts += ["", "=== User-Side Context (framing lens — NOT evidence) ===", *user_side]
     return "\n".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# Public entry-point
-# ---------------------------------------------------------------------------
-
 def run(state: dict[str, Any]) -> dict[str, Any]:
-    """Synthesise pain-point hypotheses from all available research."""
-
-    new_errors: list[str] = []
-
-    user_prompt = _build_user_prompt(state)
-
+    """Synthesise the research into ``pain_point_hypotheses``."""
     result = structured_extract(
         system_prompt=_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
+        user_prompt=_build_user_prompt(state),
         response_model=PainPointHypotheses,
         tier=Tier.REASONING,
     )
-
     if result is None:
-        new_errors.append("pain_point_agent: LLM reasoning failed, returning empty hypotheses.")
-        return {"pain_point_hypotheses": _empty_hypotheses(), "errors": new_errors}
-
+        return {
+            "pain_point_hypotheses": empty_hypotheses(),
+            "errors": ["pain_point_agent: LLM reasoning failed, returning empty hypotheses."],
+        }
     return {"pain_point_hypotheses": result.model_dump()}

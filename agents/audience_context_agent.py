@@ -1,37 +1,19 @@
-"""Audience Context Agent — LLM reasoning plus deterministic role context.
+"""Audience context: what this stakeholder is likely to care about, and how to talk to them.
 
-Builds an audience profile grounded in:
-- normalized function and seniority (primary anchor)
-- company profile (industry, complexity)
-- meeting type and goal
-- engagement context (interaction stage, conversation mode, tone)
-- person profile — **only** when match_confidence is "medium" or "high"
-
-If person-level evidence is weak or absent, the agent falls back entirely
-to function/seniority/meeting-context reasoning.
-
-Ownership:  ``audience_context`` only.
+The model reasons from the stakeholder's function and seniority first, then sharpens that
+with the company profile and the engagement stage. Details about the contact are used only
+when the contact lookup found a reliable match.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agents.person_research import has_reliable_match
 from services.llm_client import Tier, structured_extract
 
-logger = logging.getLogger(__name__)
-
-# Confidence values that permit using person-level details.
-# See CLAUDE.md rule 4 / PROJECT_SPEC §5.
-_RELIABLE_CONFIDENCE = frozenset({"medium", "high"})
-
-
-# ---------------------------------------------------------------------------
-# Pydantic schema for LLM output
-# ---------------------------------------------------------------------------
 
 class AudienceContext(BaseModel):
     """Structured audience profile for the meeting stakeholder."""
@@ -61,27 +43,56 @@ class AudienceContext(BaseModel):
     )
 
 
-# ---------------------------------------------------------------------------
-# Function-based priority seeds (deterministic, per spec §6)
-# ---------------------------------------------------------------------------
-
+# Typical priorities for each function, given to the model as a starting point.
 _FUNCTION_PRIORITIES: dict[str, list[str]] = {
-    "finance": ["financial visibility", "forecasting accuracy", "margin control", "cost optimisation", "compliance"],
-    "accounting": ["close-process efficiency", "reconciliation accuracy", "internal controls", "regulatory compliance"],
-    "engineering": ["scalability", "system reliability", "technical debt reduction", "developer productivity"],
-    "product": ["roadmap execution", "feature prioritisation", "product analytics", "user retention"],
+    "finance": [
+        "financial visibility",
+        "forecasting accuracy",
+        "margin control",
+        "cost optimisation",
+        "compliance",
+    ],
+    "accounting": [
+        "close-process efficiency",
+        "reconciliation accuracy",
+        "internal controls",
+        "regulatory compliance",
+    ],
+    "engineering": [
+        "scalability",
+        "system reliability",
+        "technical debt reduction",
+        "developer productivity",
+    ],
+    "product": [
+        "roadmap execution",
+        "feature prioritisation",
+        "product analytics",
+        "user retention",
+    ],
     "sales": ["pipeline health", "conversion rates", "revenue predictability", "sales enablement"],
-    "strategy": ["growth trajectory", "market expansion", "competitive positioning", "M&A readiness"],
+    "strategy": [
+        "growth trajectory",
+        "market expansion",
+        "competitive positioning",
+        "M&A readiness",
+    ],
     "it_data": ["system integration", "data governance", "data quality", "security posture"],
-    "operations": ["process efficiency", "execution visibility", "cross-functional coordination", "supply chain resilience"],
-    "transformation": ["change management effectiveness", "adoption metrics", "rollout governance", "stakeholder alignment"],
+    "operations": [
+        "process efficiency",
+        "execution visibility",
+        "cross-functional coordination",
+        "supply chain resilience",
+    ],
+    "transformation": [
+        "change management effectiveness",
+        "adoption metrics",
+        "rollout governance",
+        "stakeholder alignment",
+    ],
     "general": ["business performance", "strategic alignment", "operational efficiency"],
 }
 
-
-# ---------------------------------------------------------------------------
-# System prompt
-# ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = """\
 You are an audience-analysis expert preparing a meeting brief.  You will
@@ -112,100 +123,78 @@ Rules:
 """
 
 
-def _empty_context() -> dict[str, Any]:
+def empty_context() -> dict[str, Any]:
     return AudienceContext(department="", communication_style="").model_dump()
 
 
-# ---------------------------------------------------------------------------
-# Build the user prompt with person-confidence gating
-# ---------------------------------------------------------------------------
-
 def _build_user_prompt(state: dict[str, Any]) -> str:
-    """Assemble the user prompt, gating person details on confidence."""
+    function = state.get("normalized_function", "general")
+    seeds = _FUNCTION_PRIORITIES.get(function, _FUNCTION_PRIORITIES["general"])
+    parts = [
+        f"Stakeholder role: {state.get('stakeholder_role', 'unknown')}",
+        f"Contact title: {state.get('contact_title') or 'not provided'}",
+        f"Normalised function: {function}",
+        f"Normalised seniority: {state.get('normalized_seniority') or 'unknown'}",
+        f"Meeting type: {state.get('meeting_type', '')}",
+        f"Meeting goal: {state.get('meeting_goal', '')}",
+        f"Function-based priority seeds: {', '.join(seeds)}",
+    ]
 
-    parts: list[str] = []
+    engagement = state.get("engagement_context", {})
+    if engagement.get("interaction_stage"):
+        parts += [
+            f"Interaction stage: {engagement['interaction_stage']}",
+            f"Conversation mode: {engagement.get('conversation_mode', 'exploratory')}",
+            f"Stage objective: {engagement.get('stage_objective', '')}",
+            f"Recommended tone: {engagement.get('recommended_tone', '')}",
+        ]
+        if engagement.get("continuity_context"):
+            parts.append(f"Continuity context: {engagement['continuity_context']}")
 
-    parts.append(f"Stakeholder role: {state.get('stakeholder_role', 'unknown')}")
-    parts.append(f"Contact title: {state.get('contact_title') or 'not provided'}")
-    parts.append(f"Normalised function: {state.get('normalized_function', 'general')}")
-    parts.append(f"Normalised seniority: {state.get('normalized_seniority') or 'unknown'}")
-    parts.append(f"Meeting type: {state.get('meeting_type', '')}")
-    parts.append(f"Meeting goal: {state.get('meeting_goal', '')}")
+    company = state.get("company_profile", {})
+    if any(company.get(key) for key in ("industry", "business_model", "products")):
+        parts += [
+            f"Company industry: {company.get('industry') or 'unknown'}",
+            f"Business model: {company.get('business_model') or 'unknown'}",
+        ]
+        if company.get("products"):
+            parts.append(f"Products/services: {', '.join(company['products'][:5])}")
+        if company.get("complexity_signals"):
+            parts.append(f"Complexity signals: {', '.join(company['complexity_signals'][:5])}")
 
-    # Function-based priority seeds (deterministic)
-    fn = state.get("normalized_function", "general")
-    seeds = _FUNCTION_PRIORITIES.get(fn, _FUNCTION_PRIORITIES["general"])
-    parts.append(f"Function-based priority seeds: {', '.join(seeds)}")
-
-    # Engagement context — stage, conversation mode, tone guidance
-    ec: dict[str, Any] = state.get("engagement_context", {})
-    if ec.get("interaction_stage"):
-        parts.append(f"Interaction stage: {ec['interaction_stage']}")
-        parts.append(f"Conversation mode: {ec.get('conversation_mode', 'exploratory')}")
-        parts.append(f"Stage objective: {ec.get('stage_objective', '')}")
-        parts.append(f"Recommended tone: {ec.get('recommended_tone', '')}")
-        continuity = ec.get("continuity_context")
-        if continuity:
-            parts.append(f"Continuity context: {continuity}")
-
-    # Company context
-    cp: dict[str, Any] = state.get("company_profile", {})
-    if any(cp.get(k) for k in ("industry", "business_model", "products")):
-        parts.append(f"Company industry: {cp.get('industry') or 'unknown'}")
-        parts.append(f"Business model: {cp.get('business_model') or 'unknown'}")
-        products = cp.get("products", [])
-        if products:
-            parts.append(f"Products/services: {', '.join(products[:5])}")
-        complexity = cp.get("complexity_signals", [])
-        if complexity:
-            parts.append(f"Complexity signals: {', '.join(complexity[:5])}")
-
-    # Person profile — gated on confidence
-    pp: dict[str, Any] = state.get("person_profile", {})
-    confidence = pp.get("match_confidence", "none")
-
-    if confidence in _RELIABLE_CONFIDENCE:
-        parts.append("")
+    person = state.get("person_profile", {})
+    parts.append("")
+    if has_reliable_match(person):
         parts.append("--- Reliable person profile (use to personalise) ---")
-        if pp.get("title"):
-            parts.append(f"Title: {pp['title']}")
-        if pp.get("department"):
-            parts.append(f"Department: {pp['department']}")
-        if pp.get("background_summary"):
-            parts.append(f"Background: {pp['background_summary']}")
-        if pp.get("public_signals"):
-            parts.append(f"Public signals: {', '.join(pp['public_signals'][:5])}")
+        for key, label in (
+            ("title", "Title"),
+            ("department", "Department"),
+            ("background_summary", "Background"),
+        ):
+            if person.get(key):
+                parts.append(f"{label}: {person[key]}")
+        if person.get("public_signals"):
+            parts.append(f"Public signals: {', '.join(person['public_signals'][:5])}")
         parts.append("--- End person profile ---")
     else:
-        parts.append("")
         parts.append(
             "No reliable person profile available — reason from "
             "function, seniority, and company context only."
         )
-
     return "\n".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# Public entry-point
-# ---------------------------------------------------------------------------
-
 def run(state: dict[str, Any]) -> dict[str, Any]:
-    """Produce audience context from role, company, and person evidence."""
-
-    new_errors: list[str] = []
-
-    user_prompt = _build_user_prompt(state)
-
+    """Profile the audience and return ``audience_context``."""
     result = structured_extract(
         system_prompt=_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
+        user_prompt=_build_user_prompt(state),
         response_model=AudienceContext,
         tier=Tier.REASONING,
     )
-
     if result is None:
-        new_errors.append("audience_context_agent: LLM reasoning failed, returning sparse context.")
-        return {"audience_context": _empty_context(), "errors": new_errors}
-
+        return {
+            "audience_context": empty_context(),
+            "errors": ["audience_context_agent: LLM reasoning failed, returning sparse context."],
+        }
     return {"audience_context": result.model_dump()}

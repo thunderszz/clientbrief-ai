@@ -58,7 +58,9 @@ def test_engagement_inference_uses_fast_tier(monkeypatch):
 @pytest.mark.parametrize("module", [company_research, external_signals])
 def test_research_agents_use_fast_tier(monkeypatch, module):
     seen = _capture_tier(monkeypatch, module)
-    monkeypatch.setattr(module, "_collect_evidence", lambda *a, **k: (["snippet"], ["https://a.test"]))
+    monkeypatch.setattr(
+        module, "gather_evidence", lambda *a, **k: (["snippet"], ["https://a.test"])
+    )
 
     module.run(dict(_STATE))
 

@@ -21,7 +21,11 @@ from core.summaries import summarize_update
         ),
         (
             "orchestrate",
-            {"normalized_function": "general", "normalized_seniority": None, "errors": ["bad domain"]},
+            {
+                "normalized_function": "general",
+                "normalized_seniority": None,
+                "errors": ["bad domain"],
+            },
             "function: general · seniority: unknown · 1 warning",
         ),
         (
@@ -31,7 +35,12 @@ from core.summaries import summarize_update
         ),
         (
             "infer_engagement",
-            {"engagement_inference": {"confidence": "high", "inferred_meeting_stage": "discovery_followup"}},
+            {
+                "engagement_inference": {
+                    "confidence": "high",
+                    "inferred_meeting_stage": "discovery_followup",
+                }
+            },
             "inferred stage discovery_followup (high confidence)",
         ),
         (
@@ -95,12 +104,23 @@ from core.summaries import summarize_update
         ),
         (
             "hypothesize",
-            {"pain_point_hypotheses": {"facts": [1, 2], "inferences": [1], "hypotheses": [1, 2, 3]}},
+            {
+                "pain_point_hypotheses": {
+                    "facts": [1, 2],
+                    "inferences": [1],
+                    "hypotheses": [1, 2, 3],
+                }
+            },
             "2 facts · 1 inference · 3 hypotheses",
         ),
         (
             "strategize",
-            {"meeting_strategy": {"recommended_questions": [1] * 5, "possible_objections": [1] * 3}},
+            {
+                "meeting_strategy": {
+                    "recommended_questions": [1] * 5,
+                    "possible_objections": [1] * 3,
+                }
+            },
             "5 questions · 3 objections",
         ),
         (

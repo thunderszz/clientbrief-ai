@@ -12,26 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from core.reliability import compute_reliability_report
-
-_INPUT_KEYS = (
-    "company_name",
-    "domain",
-    "meeting_type",
-    "stakeholder_role",
-    "meeting_goal",
-    "contact_name",
-    "contact_title",
-    "meeting_stage",
-    "relationship_status",
-    "previous_meeting_outcome",
-    "meeting_notes_summary",
-    "user_role",
-    "user_company",
-    "user_function",
-    "engagement_type",
-    "desired_outcome",
-    "success_definition",
-)
+from core.state import INPUT_FIELDS
 
 _DICT_KEYS = (
     "engagement_inference",
@@ -49,7 +30,7 @@ _LIST_KEYS = ("external_signals", "sources", "errors", "llm_calls")
 
 def build_result(state: Mapping[str, Any]) -> dict[str, Any]:
     """Pick the public slices of the final state and make them JSON-safe."""
-    result: dict[str, Any] = {"input": {key: state.get(key) for key in _INPUT_KEYS}}
+    result: dict[str, Any] = {"input": {key: state.get(key) for key in INPUT_FIELDS}}
     for key in _DICT_KEYS:
         result[key] = state.get(key) or {}
     for key in _LIST_KEYS:

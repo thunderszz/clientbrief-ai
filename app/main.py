@@ -1,25 +1,8 @@
-"""ClientBrief AI — Interactive CLI entrypoint.
+"""Terminal version of ClientBrief: describe the meeting, check the fields, read the brief.
 
-Flow
-----
-1. Welcome screen
-2. Guided free-text input  (user describes the meeting in plain language)
-3. Intake agent parses text → shows what was understood
-4. Confirmation / correction loop
-   a. Show all extracted fields
-   b. Prompt to fill any missing important fields
-   c. Flag low-confidence fields — user can accept or correct them
-5. Show engagement inference (if inferred) — user can accept or correct
-6. Run LangGraph workflow with live stage progress
-7. Display the full brief in the terminal
-8. Save brief to ./output/{company}_{timestamp}.md
-
-Usage::
-
-    cd clientbreef_ai
     python -m app.main
-    # or
-    python app/main.py
+
+The brief is printed and saved to ``output/<company>_<timestamp>.md``.
 """
 
 from __future__ import annotations
@@ -27,14 +10,7 @@ from __future__ import annotations
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
-
-# Load .env before anything else so API keys are available
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # python-dotenv optional — keys must be set manually in env
+from typing import Any, NoReturn
 
 from rich import box
 from rich.console import Console
@@ -49,101 +25,60 @@ from core.summaries import summarize_update
 
 console = Console()
 
-# ---------------------------------------------------------------------------
-_STAGE_LABELS: list[tuple[str, str]] = [
-    ("orchestrate",        "Validating inputs"),
-    ("infer_engagement",   "Inferring engagement context"),
-    ("engagement_context", "Resolving engagement stage"),
-    ("plan",               "Building research plan"),
-    ("research_company",   "Researching company"),
-    ("research_signals",   "Detecting strategic signals"),
-    ("research_person",    "Looking up meeting contact"),
-    ("audience_context",   "Building audience context"),
-    ("hypothesize",        "Generating pain point hypotheses"),
-    ("strategize",         "Crafting meeting strategy"),
-    ("compose",            "Composing brief"),
+# (key, label, required) for the fields shown in the confirmation table.
+_FIELDS: list[tuple[str, str, bool]] = [
+    ("company_name", "Company name", True),
+    ("domain", "Company domain", True),
+    ("meeting_type", "Meeting type", True),
+    ("stakeholder_role", "Stakeholder / audience", True),
+    ("meeting_goal", "Meeting goal", True),
+    ("contact_name", "Contact name", False),
+    ("contact_title", "Contact title", False),
+    ("meeting_stage", "Meeting stage", False),
+    ("relationship_status", "Relationship status", False),
+    ("previous_meeting_outcome", "Previous outcome", False),
+    ("meeting_notes_summary", "Prior meeting notes", False),
 ]
-
-# ---------------------------------------------------------------------------
-# Field display metadata for the confirmation panel
-# ---------------------------------------------------------------------------
-_FIELD_META: list[tuple[str, str, bool]] = [
-    # (key,                     label,                   required)
-    ("company_name",            "Company name",           True),
-    ("domain",                  "Company domain",         True),
-    ("meeting_type",            "Meeting type",           True),
-    ("stakeholder_role",        "Stakeholder / audience", True),
-    ("meeting_goal",            "Meeting goal",           True),
-    ("contact_name",            "Contact name",           False),
-    ("contact_title",           "Contact title",          False),
-    ("meeting_stage",           "Meeting stage",          False),
-    ("relationship_status",     "Relationship status",    False),
-    ("previous_meeting_outcome","Previous outcome",       False),
-    ("meeting_notes_summary",   "Prior meeting notes",    False),
-]
-
-_VALID_MEETING_TYPES   = {"consulting_intro", "sales_discovery", "account_review"}
-_VALID_STAGES          = {
-    "first_intro", "discovery_followup", "solution_discussion",
-    "proposal_review", "negotiation", "client_kickoff", "account_expansion",
-}
-_VALID_REL_STATUSES    = {"prospect", "active_opportunity", "client", "former_client"}
-_VALID_PREV_OUTCOMES   = {"positive", "neutral", "unclear", "no_previous_meeting"}
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _clear_line() -> None:
-    console.print("")
+_REQUIRED_KEYS = [key for key, _, required in _FIELDS if required]
+_MEETING_TYPE_HINT = "consulting_intro | sales_discovery | account_review"
 
 
 def _ask(prompt: str, default: str = "", optional: bool = False) -> str | None:
-    """Prompt for a string value. Returns None if optional and left blank."""
+    """Ask for a value; blank answers come back as None."""
     suffix = " [dim](optional — press Enter to skip)[/dim]" if optional else ""
     value = Prompt.ask(f"[bold cyan]{prompt}[/bold cyan]{suffix}", default=default, console=console)
-    if optional and not value.strip():
-        return None
     return value.strip() or None
 
 
 def _show_extracted_table(fields: dict) -> None:
-    """Render extracted fields as a styled table."""
     table = Table(box=box.ROUNDED, show_header=True, header_style="bold magenta", expand=False)
     table.add_column("Field", style="dim", width=24)
     table.add_column("Extracted value")
-
-    for key, label, required in _FIELD_META:
-        val = fields.get(key)
-        if val:
-            table.add_row(label, f"[green]{val}[/green]")
+    for key, label, required in _FIELDS:
+        value = fields.get(key)
+        if value:
+            table.add_row(label, f"[green]{value}[/green]")
         elif required:
             table.add_row(label, "[red]MISSING[/red]")
         else:
             table.add_row(label, "[dim]—[/dim]")
-
     console.print(table)
 
 
 def _prompt_fill_missing(fields: dict, missing: list[str]) -> dict:
-    """For each missing important field, ask the user to provide it."""
-    if not missing:
+    """Ask for each required field the intake could not find (recommended ones are skipped)."""
+    required_missing = [label for label in missing if "(recommended)" not in label]
+    if not required_missing:
         return fields
 
-    # Filter to only the truly important ones (not recommended)
-    important_missing = [m for m in missing if "(recommended)" not in m]
-    if not important_missing:
-        return fields
-
-    console.print(Panel(
-        "[yellow]Some required fields couldn't be extracted. Please fill them in:[/yellow]",
-        border_style="yellow",
-    ))
-
-    key_for_label = {label: key for key, label, _ in _FIELD_META}
-
-    for label in important_missing:
+    console.print(
+        Panel(
+            "[yellow]Some required fields couldn't be extracted. Please fill them in:[/yellow]",
+            border_style="yellow",
+        )
+    )
+    key_for_label = {label: key for key, label, _ in _FIELDS}
+    for label in required_missing:
         key = key_for_label.get(label)
         if not key:
             continue
@@ -152,78 +87,87 @@ def _prompt_fill_missing(fields: dict, missing: list[str]) -> dict:
                 "  [dim]Options: [/dim]"
                 "[cyan]consulting_intro[/cyan] | [cyan]sales_discovery[/cyan] | [cyan]account_review[/cyan]"
             )
-        val = _ask(f"  {label}")
-        if val:
-            fields[key] = val
-
+        value = _ask(f"  {label}")
+        if value:
+            fields[key] = value
     return fields
 
 
 def _prompt_confirm_low_confidence(fields: dict, low_confidence: list[dict]) -> dict:
-    """Show low-confidence fields and let the user accept or correct them."""
+    """Let the user accept or correct each value the intake was unsure about."""
     if not low_confidence:
         return fields
 
-    console.print(Panel(
-        "[yellow]I extracted the following fields but I'm not fully confident. "
-        "Please confirm or correct:[/yellow]",
-        border_style="yellow",
-    ))
-
-    for lc in low_confidence:
-        field = lc.get("field", "")
-        value = lc.get("value", "")
-        reason = lc.get("reason", "")
-
+    console.print(
+        Panel(
+            "[yellow]I extracted the following fields but I'm not fully confident. "
+            "Please confirm or correct:[/yellow]",
+            border_style="yellow",
+        )
+    )
+    for item in low_confidence:
+        field, value = item.get("field", ""), item.get("value", "")
         console.print(
             f"\n  [bold]{field}[/bold] = [cyan]{value}[/cyan]\n"
-            f"  [dim]Reason for uncertainty: {reason}[/dim]"
+            f"  [dim]Reason for uncertainty: {item.get('reason', '')}[/dim]"
         )
-        keep = Confirm.ask(f"  Accept [cyan]{value}[/cyan] for [bold]{field}[/bold]?", console=console, default=True)
-        if not keep:
-            new_val = _ask(f"  Enter correct value for {field}", optional=True)
-            if new_val:
-                # map field name back to key (low_confidence uses field_name from agent)
-                # field already IS the key
-                fields[field] = new_val
-            else:
-                fields[field] = None  # user cleared it — treat as missing
-
+        if not Confirm.ask(
+            f"  Accept [cyan]{value}[/cyan] for [bold]{field}[/bold]?",
+            console=console,
+            default=True,
+        ):
+            # An empty answer clears the field, which then counts as missing.
+            fields[field] = _ask(f"  Enter correct value for {field}", optional=True)
     return fields
 
 
-def _show_engagement_inference(engagement: dict) -> None:
-    """Display what the inference agent inferred about engagement context."""
-    confidence = engagement.get("confidence", "")
+def _prompt_edit_any(fields: dict) -> dict:
+    console.print("")
+    console.print(Rule("[dim]Optional additions[/dim]"))
+    console.print("[dim]If anything important is missing or wrong, you can correct it now.[/dim]\n")
+    if not Confirm.ask(
+        "  Do you want to review or change any other field?", console=console, default=False
+    ):
+        return fields
+
+    for key, label, required in _FIELDS:
+        if key == "meeting_type":
+            console.print(f"  [dim]Options: {_MEETING_TYPE_HINT}[/dim]")
+        value = Prompt.ask(
+            f"  [bold]{label}[/bold]", default=fields.get(key) or "", console=console
+        )
+        if value.strip():
+            fields[key] = value.strip()
+        elif not required:
+            fields[key] = None
+    return fields
+
+
+def _show_engagement_inference(inference: dict) -> None:
+    """Show what the pipeline guessed about the relationship, unless it had nothing to guess."""
+    confidence = inference.get("confidence", "")
     if confidence == "not_needed":
-        return  # all fields were explicit — nothing to show
+        return
 
     console.print(Rule("[dim]Engagement inference[/dim]"))
-
-    stage    = engagement.get("inferred_meeting_stage")
-    rel      = engagement.get("inferred_relationship_status")
-    outcome  = engagement.get("inferred_previous_meeting_outcome")
-    summary  = engagement.get("reasoning_summary", "")
-
     table = Table(box=box.SIMPLE, show_header=False, expand=False)
     table.add_column("", style="dim", width=26)
     table.add_column("")
-
-    if stage:
-        table.add_row("Inferred meeting stage", f"[cyan]{stage}[/cyan]")
-    if rel:
-        table.add_row("Inferred relationship", f"[cyan]{rel}[/cyan]")
-    if outcome:
-        table.add_row("Inferred previous outcome", f"[cyan]{outcome}[/cyan]")
+    for key, label in (
+        ("inferred_meeting_stage", "Inferred meeting stage"),
+        ("inferred_relationship_status", "Inferred relationship"),
+        ("inferred_previous_meeting_outcome", "Inferred previous outcome"),
+    ):
+        if inference.get(key):
+            table.add_row(label, f"[cyan]{inference[key]}[/cyan]")
     table.add_row("Confidence", f"[yellow]{confidence}[/yellow]")
-    if summary:
-        table.add_row("Reasoning", f"[dim]{summary}[/dim]")
-
+    if inference.get("reasoning_summary"):
+        table.add_row("Reasoning", f"[dim]{inference['reasoning_summary']}[/dim]")
     console.print(table)
 
 
 def _run_workflow(workflow_input: dict, graph: Any = None) -> dict:
-    """Run the LangGraph pipeline, printing each node as it finishes."""
+    """Run the pipeline, printing each node as it finishes, and return the final state."""
     if graph is None:
         from core.workflow import app as graph
 
@@ -249,28 +193,32 @@ def _reliability_line(result: dict) -> str:
 
 
 def _save_brief(company_name: str, brief: str) -> Path:
-    """Write the brief to ./output/{company}_{timestamp}.md"""
     out_dir = Path("output")
     out_dir.mkdir(exist_ok=True)
     safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in company_name)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = out_dir / f"{safe_name}_{timestamp}.md"
+    path = out_dir / f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
     path.write_text(brief, encoding="utf-8")
     return path
 
 
-# ---------------------------------------------------------------------------
-# Main entrypoint
-# ---------------------------------------------------------------------------
+def _exit(message: str) -> NoReturn:
+    console.print(f"[red]{message}[/red]")
+    sys.exit(1)
+
 
 def main() -> None:
-    console.print(Panel.fit(
-        "[bold white]ClientBrief AI[/bold white]\n"
-        "[dim]Pre-meeting intelligence — powered by Gemini + Tavily[/dim]",
-        border_style="bright_blue",
-        padding=(1, 4),
-    ))
+    from dotenv import load_dotenv
 
+    load_dotenv()
+
+    console.print(
+        Panel.fit(
+            "[bold white]ClientBrief AI[/bold white]\n"
+            "[dim]Pre-meeting intelligence — powered by Gemini + Tavily[/dim]",
+            border_style="bright_blue",
+            padding=(1, 4),
+        )
+    )
     console.print(
         "\n[bold]Describe your upcoming meeting in plain language.[/bold]\n"
         "[dim]Include as much as you can — the more context, the better the brief.\n\n"
@@ -281,148 +229,75 @@ def main() -> None:
         "  • Whether this is a first meeting or a follow-up\n"
         "  • Any relevant history or prior interactions\n[/dim]"
     )
-
-    raw_text = Prompt.ask(
-        "[bold cyan]Your meeting description[/bold cyan]",
-        console=console,
-    )
-
+    raw_text = Prompt.ask("[bold cyan]Your meeting description[/bold cyan]", console=console)
     if not raw_text.strip():
-        console.print("[red]No input provided. Exiting.[/red]")
-        sys.exit(1)
+        _exit("No input provided. Exiting.")
 
-    # -----------------------------------------------------------------------
-    # Step 1 — Run intake agent
-    # -----------------------------------------------------------------------
     console.print("")
     with console.status("[cyan]Parsing your meeting description…[/cyan]", spinner="dots"):
-        from agents.meeting_intake_agent import run as intake_run
-        fields = intake_run(raw_text)
+        from agents.meeting_intake_agent import run as run_intake
+
+        fields = run_intake(raw_text)
 
     console.print(Rule("[bold]What I understood[/bold]"))
-
-    # Show confirmation summary
-    summary = fields.get("intake_confirmation_summary", "")
-    if summary:
-        console.print(Panel(f"[dim]{summary}[/dim]", border_style="dim"))
-
+    if fields.get("intake_confirmation_summary"):
+        console.print(
+            Panel(f"[dim]{fields['intake_confirmation_summary']}[/dim]", border_style="dim")
+        )
     _show_extracted_table(fields)
 
-    # -----------------------------------------------------------------------
-    # Step 2 — Fill missing important fields
-    # -----------------------------------------------------------------------
     fields = _prompt_fill_missing(fields, fields.get("intake_missing_fields", []))
-
-    # -----------------------------------------------------------------------
-    # Step 3 — Confirm / correct low-confidence fields
-    # -----------------------------------------------------------------------
     fields = _prompt_confirm_low_confidence(fields, fields.get("intake_low_confidence_fields", []))
+    fields = _prompt_edit_any(fields)
 
-    # -----------------------------------------------------------------------
-    # Step 4 — Optional: let user add anything that was missed
-    # -----------------------------------------------------------------------
-    _clear_line()
-    console.print(Rule("[dim]Optional additions[/dim]"))
-    console.print("[dim]If anything important is missing or wrong, you can correct it now.[/dim]\n")
-
-    want_edit = Confirm.ask(
-        "  Do you want to review or change any other field?",
-        console=console,
-        default=False,
-    )
-    if want_edit:
-        for key, label, required in _FIELD_META:
-            current = fields.get(key) or ""
-            if key == "meeting_type":
-                console.print(
-                    "  [dim]Options: consulting_intro | sales_discovery | account_review[/dim]"
-                )
-            new_val = Prompt.ask(
-                f"  [bold]{label}[/bold]",
-                default=current,
-                console=console,
-            )
-            if new_val.strip():
-                fields[key] = new_val.strip()
-            elif not required:
-                fields[key] = None
-
-    # -----------------------------------------------------------------------
-    # Step 5 — Final validation before running
-    # -----------------------------------------------------------------------
-    required_keys = ["company_name", "domain", "meeting_type", "stakeholder_role", "meeting_goal"]
-    still_missing = [k for k in required_keys if not fields.get(k)]
+    still_missing = [key for key in _REQUIRED_KEYS if not fields.get(key)]
     if still_missing:
-        console.print(
-            f"\n[red]Cannot generate brief — still missing required fields: "
-            f"{', '.join(still_missing)}[/red]"
+        _exit(
+            f"\nCannot generate brief — still missing required fields: {', '.join(still_missing)}"
         )
-        sys.exit(1)
 
-    # Build the workflow input (strip intake metadata keys — not part of BriefingState directly)
-    workflow_input = {k: v for k, v in fields.items()}
-
-    # -----------------------------------------------------------------------
-    # Step 6 — Run the pipeline
-    # -----------------------------------------------------------------------
     console.print("")
     console.print(Rule("[bold]Generating brief[/bold]"))
-    result = _run_workflow(workflow_input)
-
+    result = _run_workflow(fields)
     if not result:
-        console.print("[red]Workflow returned no result. Check logs for errors.[/red]")
-        sys.exit(1)
+        _exit("Workflow returned no result. Check logs for errors.")
 
-    # -----------------------------------------------------------------------
-    # Step 7 — Show engagement inference (transparency)
-    # -----------------------------------------------------------------------
-    engagement = result.get("engagement_inference", {})
-    _show_engagement_inference(engagement)
+    _show_engagement_inference(result.get("engagement_inference", {}))
 
-    # -----------------------------------------------------------------------
-    # Step 8 — Show errors / warnings if any
-    # -----------------------------------------------------------------------
-    errors = result.get("errors", [])
-    if errors:
+    if result.get("errors"):
         console.print(Rule("[yellow]Warnings[/yellow]"))
-        for err in errors:
-            console.print(f"  [yellow]⚠  {err}[/yellow]")
+        for error in result["errors"]:
+            console.print(f"  [yellow]⚠  {error}[/yellow]")
 
-    # -----------------------------------------------------------------------
-    # Step 9 — Display reliability score
-    # -----------------------------------------------------------------------
     reliability = result.get("brief_reliability", 0)
-    score_color = "green" if reliability >= 4 else "yellow" if reliability >= 2 else "red"
+    colour = "green" if reliability >= 4 else "yellow" if reliability >= 2 else "red"
     console.print("")
-    console.print(Panel(
-        f"[bold {score_color}]{_reliability_line(result)}[/bold {score_color}]",
-        border_style=score_color,
-        expand=False,
-    ))
+    console.print(
+        Panel(
+            f"[bold {colour}]{_reliability_line(result)}[/bold {colour}]",
+            border_style=colour,
+            expand=False,
+        )
+    )
 
-    # -----------------------------------------------------------------------
-    # Step 10 — Render the brief
-    # -----------------------------------------------------------------------
     final_brief = result.get("final_brief", "")
-    if final_brief:
-        console.print("")
-        console.print(Rule("[bold]Your Pre-Meeting Brief[/bold]"))
-        console.print(Markdown(final_brief))
-    else:
-        console.print("[red]No brief was produced. Check logs.[/red]")
-        sys.exit(1)
-
-    # -----------------------------------------------------------------------
-    # Step 11 — Save to file
-    # -----------------------------------------------------------------------
-    company_name = result.get("company_name") or fields.get("company_name", "company")
-    saved_path = _save_brief(company_name, final_brief)
+    if not final_brief:
+        _exit("No brief was produced. Check logs.")
     console.print("")
-    console.print(Panel(
-        f"[green]Brief saved to:[/green] [bold]{saved_path}[/bold]",
-        border_style="green",
-        expand=False,
-    ))
+    console.print(Rule("[bold]Your Pre-Meeting Brief[/bold]"))
+    console.print(Markdown(final_brief))
+
+    saved_path = _save_brief(
+        result.get("company_name") or fields.get("company_name", "company"), final_brief
+    )
+    console.print("")
+    console.print(
+        Panel(
+            f"[green]Brief saved to:[/green] [bold]{saved_path}[/bold]",
+            border_style="green",
+            expand=False,
+        )
+    )
 
 
 if __name__ == "__main__":

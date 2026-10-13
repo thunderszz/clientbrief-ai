@@ -1,39 +1,12 @@
-"""LangGraph workflow — wires all agents into a stateful pipeline.
-
-Graph structure (v2 — engagement-first):
+"""The LangGraph pipeline: eleven nodes, with the three research nodes running in parallel.
 
     orchestrate → infer_engagement → engagement_context → plan
-        → [research_company, research_signals, research_person]
-              ↓ (fan-in)
-         audience_context → hypothesize → strategize → compose → END
+        → research_company | research_signals | research_person
+        → audience_context → hypothesize → strategize → compose
 
-Key changes from v1:
-- Engagement inference and context resolution now happen BEFORE planning.
-- The planner reads ``engagement_context`` (including ``research_mode``)
-  to calibrate research depth and focus.
-- The three research agents still run in parallel (fan-out from ``plan``,
-  fan-in to ``audience_context``).
-- ``audience_context`` can read ``engagement_context`` from shared state
-  since it was written in an earlier step.
-
-The node ids and edges come from ``core/pipeline.py`` (shared with the API
-and UI). Every node is wrapped by ``instrument()``, which records the LLM
-calls it made (model, tier, latency, fallback) into ``state["llm_calls"]``.
-
-Usage::
-
-    from core.workflow import app
-
-    result = app.invoke({
-        "company_name": "Acme Corp",
-        "domain": "acme.com",
-        "meeting_type": "sales_discovery",
-        "stakeholder_role": "VP Finance",
-        "meeting_goal": "Follow up on our pricing discussion from last week",
-        # Engagement fields are optional — inference will fill gaps
-    })
-
-    print(result["final_brief"])
+Node ids and edges come from ``core/pipeline.py``, which the API also serves to the UI.
+Every node is wrapped by ``instrument()``, which attaches the LLM calls it made (model,
+tier, latency, fallback) to its state update.
 """
 
 from __future__ import annotations
@@ -92,14 +65,7 @@ def instrument(node_id: str, fn: NodeFn) -> NodeFn:
 
 
 def build_graph() -> StateGraph:
-    """Construct the ClientBrief AI LangGraph pipeline.
-
-    Returns the un-compiled ``StateGraph`` so callers can inspect or
-    extend it before compiling.
-
-    Fan-out from ``plan`` to the three research nodes runs them in parallel;
-    ``audience_context`` waits for all three (fan-in).
-    """
+    """The uncompiled graph. ``audience_context`` waits for all three research nodes."""
     graph = StateGraph(BriefingState)
 
     for node in PIPELINE_NODES:
@@ -113,5 +79,4 @@ def build_graph() -> StateGraph:
     return graph
 
 
-# Pre-compiled application — importable by ``from core.workflow import app``.
 app = build_graph().compile()

@@ -88,7 +88,9 @@ def rating_for(score: int) -> int:
     return 1 if score > 0 else 0
 
 
-def _component(key: str, label: str, points: float, maximum: int, detail: str, applicable: bool = True):
+def _component(
+    key: str, label: str, points: float, maximum: int, detail: str, applicable: bool = True
+):
     return {
         "key": key,
         "label": label,
@@ -111,7 +113,9 @@ def _months_old(raw: Any, today: date) -> int | None:
     return (today.year - year) * 12 + (today.month - month)
 
 
-def compute_reliability_report(state: Mapping[str, Any], today: date | None = None) -> dict[str, Any]:
+def compute_reliability_report(
+    state: Mapping[str, Any], today: date | None = None
+) -> dict[str, Any]:
     """Score how well-grounded a brief is. See the module docstring for the components."""
     today = today or datetime.now(UTC).date()
     sources = aggregate_sources(state)
@@ -168,11 +172,15 @@ def compute_reliability_report(state: Mapping[str, Any], today: date | None = No
     undated = sum(1 for age in ages if age is None)
     if signals:
         freshness_points = _FRESHNESS_MAX * (recent + _UNDATED_CREDIT * undated) / len(signals)
-        freshness_detail = f"{recent} of {len(signals)} signals from the last {_FRESH_MONTHS} months"
+        freshness_detail = (
+            f"{recent} of {len(signals)} signals from the last {_FRESH_MONTHS} months"
+        )
         freshness_detail += f", {undated} undated" if undated else ""
     else:
         freshness_points, freshness_detail = 0, "no signals to date"
-    freshness_c = _component("freshness", "Freshness", freshness_points, _FRESHNESS_MAX, freshness_detail)
+    freshness_c = _component(
+        "freshness", "Freshness", freshness_points, _FRESHNESS_MAX, freshness_detail
+    )
 
     # --- contact ----------------------------------------------------------------
     if state.get("contact_name"):

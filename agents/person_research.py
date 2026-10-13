@@ -1,39 +1,32 @@
-"""Person Research Agent — LLM-assisted identity matching and profile extraction.
+"""Contact lookup: does public evidence reliably identify the person we are meeting?
 
-Reads ``contact_name``, ``contact_title``, ``company_name``, and
-``stakeholder_role`` from state.
-
-If ``contact_name`` is not provided, no search is attempted and a sparse
-low-confidence profile is returned immediately.
-
-When a name is provided the agent:
-1. Runs person-specific Tavily queries.
-2. Feeds retrieved text to an LLM that evaluates identity-match confidence
-   and extracts a structured person profile.
-3. If confidence is ``"low"``, the returned profile is kept intentionally
-   sparse — downstream agents must not over-interpret it.
-
-Ownership:  ``person_profile`` only.
+With no contact name there is nothing to search. Otherwise the model judges how well the
+search results match the person, and anything below a medium-confidence match is stripped
+back to the name, so later agents never build on the wrong person.
 """
 
 from __future__ import annotations
 
-import logging
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from agents.evidence import evidence_block, gather_evidence
 from core.utils import build_person_queries
 from services.llm_client import structured_extract
-from services.tavily_client import SearchResponse, TavilySearchClient
 
-logger = logging.getLogger(__name__)
+RELIABLE_MATCH = frozenset({"medium", "high"})
+
+# Fields that describe the person; cleared when the match is not reliable.
+_DETAIL_FIELDS = ("title", "department", "tenure_hint", "background_summary")
 
 
-# ---------------------------------------------------------------------------
-# Pydantic schema for the LLM's structured output
-# ---------------------------------------------------------------------------
+def has_reliable_match(person_profile: Mapping[str, Any]) -> bool:
+    """Person-level detail may be used only for a medium or high confidence match."""
+    return person_profile.get("match_confidence", "none") in RELIABLE_MATCH
+
 
 class MatchConfidence(StrEnum):
     """How confidently we matched the contact to a real person."""
@@ -65,12 +58,8 @@ class PersonProfile(BaseModel):
             "'low' = ambiguous, conflicting, or no useful evidence."
         )
     )
-    name: str | None = Field(
-        None, description="Full name as it appears in the evidence."
-    )
-    title: str | None = Field(
-        None, description="Job title as found in the evidence."
-    )
+    name: str | None = Field(None, description="Full name as it appears in the evidence.")
+    title: str | None = Field(None, description="Job title as found in the evidence.")
     department: str | None = Field(
         None, description="Department or function (e.g. Engineering, Finance)."
     )
@@ -93,10 +82,6 @@ class PersonProfile(BaseModel):
         ),
     )
 
-
-# ---------------------------------------------------------------------------
-# System prompt
-# ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = """\
 You are a professional-identity research analyst.  You will receive text
@@ -124,138 +109,50 @@ Rules:
 """
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _empty_profile() -> dict[str, Any]:
-    """Return a valid sparse person_profile dict (no match)."""
+def empty_profile() -> dict[str, Any]:
+    """The profile when no contact was named or nothing usable was found."""
     return {
         "matched_person": False,
         "match_confidence": "none",
         "name": None,
-        "title": None,
-        "department": None,
-        "tenure_hint": None,
-        "background_summary": None,
+        **dict.fromkeys(_DETAIL_FIELDS),
         "public_signals": [],
         "sources": [],
     }
 
 
-def _collect_evidence(
-    contact_name: str,
-    company_name: str,
-    contact_title: str | None,
-) -> tuple[list[str], list[str]]:
-    """Run Tavily queries and return (evidence_snippets, source_urls)."""
-    try:
-        client = TavilySearchClient()
-    except OSError as exc:
-        logger.warning("Tavily client init failed: %s", exc)
-        return [], []
-
-    queries = build_person_queries(contact_name, company_name, contact_title)
-    responses: list[SearchResponse] = client.search_batch(queries)
-
-    snippets: list[str] = []
-    urls: list[str] = []
-    seen_urls: set[str] = set()
-
-    for resp in responses:
-        if not resp.ok:
-            continue
-        for hit in resp.results:
-            snippets.append(f"[source: {hit.url}] [{hit.title}] {hit.content}")
-            if hit.url and hit.url not in seen_urls:
-                seen_urls.add(hit.url)
-                urls.append(hit.url)
-
-    return snippets, urls
-
-
-def _enforce_low_confidence_sparsity(profile: dict[str, Any]) -> dict[str, Any]:
-    """If confidence is not medium/high, strip detail fields.
-
-    Per spec (CLAUDE.md rule 4): person-level information must only be used
-    when match_confidence is "medium" or "high".  Both "low" and "none"
-    (no search attempted) are treated as non-reliable.
-    """
-    # Only "medium" and "high" are considered reliable.
-    if profile.get("match_confidence") not in ("medium", "high"):
-        profile["matched_person"] = False
-        profile["title"] = None
-        profile["department"] = None
-        profile["tenure_hint"] = None
-        profile["background_summary"] = None
-        profile["public_signals"] = []
-    return profile
-
-
-# ---------------------------------------------------------------------------
-# Public entry-point
-# ---------------------------------------------------------------------------
-
 def run(state: dict[str, Any]) -> dict[str, Any]:
-    """Run person research and return a ``person_profile`` update."""
-
-    contact_name: str | None = state.get("contact_name")
-    contact_title: str | None = state.get("contact_title")
-    company_name: str = state.get("company_name", "")
-    new_errors: list[str] = []
-
-    # --- Fast exit: no contact_name → no search -------------------------------
+    """Look the contact up and return ``person_profile``."""
+    contact_name = state.get("contact_name")
     if not contact_name:
-        return {"person_profile": _empty_profile()}
+        return {"person_profile": empty_profile()}
 
-    # --- 1. Gather evidence via Tavily ----------------------------------------
-    snippets, source_urls = _collect_evidence(
-        contact_name, company_name, contact_title,
+    company_name = state.get("company_name", "")
+    contact_title = state.get("contact_title")
+    snippets, sources = gather_evidence(
+        build_person_queries(contact_name, company_name, contact_title)
     )
-
+    name_only = {**empty_profile(), "name": contact_name, "sources": sources}
     if not snippets:
-        new_errors.append(
-            f"person_research: no evidence found for '{contact_name}' at '{company_name}'."
-        )
-        profile = _empty_profile()
-        profile["name"] = contact_name
-        profile["sources"] = source_urls
-        return {"person_profile": profile, "errors": new_errors}
-
-    # --- 2. Ask the LLM to evaluate match + extract profile -------------------
-    evidence_block = "\n\n".join(snippets[:20])   # person results tend to be shorter
-    user_prompt = (
-        f"Target person: {contact_name}\n"
-        f"Company: {company_name}\n"
-        f"Expected title (if known): {contact_title or 'not provided'}\n\n"
-        f"--- Evidence ---\n{evidence_block}\n--- End evidence ---\n\n"
-        "Evaluate the identity match and extract a person profile."
-    )
+        error = f"person_research: no evidence found for '{contact_name}' at '{company_name}'."
+        return {"person_profile": name_only, "errors": [error]}
 
     result = structured_extract(
         system_prompt=_SYSTEM_PROMPT,
-        user_prompt=user_prompt,
+        user_prompt=(
+            f"Target person: {contact_name}\n"
+            f"Company: {company_name}\n"
+            f"Expected title (if known): {contact_title or 'not provided'}\n\n"
+            f"{evidence_block(snippets, 20)}\n\n"
+            "Evaluate the identity match and extract a person profile."
+        ),
         response_model=PersonProfile,
     )
-
     if result is None:
-        new_errors.append("person_research: LLM extraction failed, returning sparse profile.")
-        profile = _empty_profile()
-        profile["name"] = contact_name
-        profile["sources"] = source_urls
-        return {"person_profile": profile, "errors": new_errors}
+        error = "person_research: LLM extraction failed, returning sparse profile."
+        return {"person_profile": name_only, "errors": [error]}
 
-    # --- 3. Post-process ------------------------------------------------------
-    profile = result.model_dump()
-
-    # Normalise confidence enum to plain string
-    if isinstance(profile.get("match_confidence"), MatchConfidence):
-        profile["match_confidence"] = profile["match_confidence"].value
-
-    # Enforce sparsity on low confidence
-    profile = _enforce_low_confidence_sparsity(profile)
-
-    # Attach source URLs (deterministic, not LLM-owned)
-    profile["sources"] = source_urls
-
-    return {"person_profile": profile}
+    profile = result.model_dump(mode="json")
+    if not has_reliable_match(profile):
+        profile.update(dict.fromkeys(_DETAIL_FIELDS), matched_person=False, public_signals=[])
+    return {"person_profile": {**profile, "sources": sources}}

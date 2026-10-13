@@ -39,7 +39,10 @@ class FakeGraph:
         for node, update in [
             ("orchestrate", {"normalized_function": "finance", "errors": []}),
             ("research_signals", {"external_signals": [{"signal_type": "financial"}]}),
-            ("compose", {"final_brief": "# Brief", "reliability_report": {"score": 70}, "sources": []}),
+            (
+                "compose",
+                {"final_brief": "# Brief", "reliability_report": {"score": 70}, "sources": []},
+            ),
         ]:
             yield "tasks", {"id": node, "name": node, "input": {}, "triggers": []}
             if node == self.fail_in:
@@ -57,7 +60,9 @@ def fake_intake(text):
         "contact_name": None,
         "raw_meeting_context": text,
         "intake_missing_fields": [],
-        "intake_low_confidence_fields": [{"field": "domain", "value": "acme.com", "reason": "guessed"}],
+        "intake_low_confidence_fields": [
+            {"field": "domain", "value": "acme.com", "reason": "guessed"}
+        ],
         "intake_confirmation_summary": "Sales discovery with Acme's CFO.",
     }
 
@@ -329,7 +334,10 @@ def test_intake_reports_failure(demo_dir):
         demo_dir=demo_dir,
         web_dist=demo_dir / "no-web",
         graph=FakeGraph(),
-        intake_fn=lambda text: {"company_name": "", "intake_confirmation_summary": "LLM extraction failed"},
+        intake_fn=lambda text: {
+            "company_name": "",
+            "intake_confirmation_summary": "LLM extraction failed",
+        },
         quota=DailyQuota(None),
     )
 
@@ -354,7 +362,9 @@ def test_intake_blocked_when_quota_is_zero(demo_dir):
 
 
 def test_credentials_repr_hides_secrets():
-    credentials = Credentials(llm_provider="gemini", llm_api_key="sk-visible?", tavily_api_key="tv-visible?")
+    credentials = Credentials(
+        llm_provider="gemini", llm_api_key="sk-visible?", tavily_api_key="tv-visible?"
+    )
 
     assert "visible" not in repr(credentials)
     assert "visible" not in str(credentials)

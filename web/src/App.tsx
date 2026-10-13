@@ -32,6 +32,12 @@ function setHash(hash: string) {
   }
 }
 
+function liveRunSubtitle(fields: MeetingFields, models: string[]): string {
+  const counterpart = fields.contact_title || fields.stakeholder_role;
+  const on = models.length ? ` on ${models.join(" and ")}` : "";
+  return `${labelFor(fields.meeting_type)} with the ${counterpart}. Live run${on}.`;
+}
+
 function recordedOrigin(demo: DemoSummary): string {
   const date = new Date(demo.recorded_at).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   return `Recorded run from ${date}`;
@@ -124,15 +130,13 @@ export default function App() {
 
   function startLive(fields: MeetingFields) {
     setError(null);
-    const models = requestCreds ? creds?.llm_provider : config?.models?.fast;
-    setView({
-      name: "run",
-      title: fields.company_name,
-      subtitle: `${labelFor(fields.meeting_type)} with the ${fields.contact_title || fields.stakeholder_role}. Live run${
-        models ? ` on ${models}${config?.models && !requestCreds ? ` and ${config.models.reasoning}` : ""}` : ""
-      }.`,
-      fields,
-    });
+    // Visitors' own keys: name the provider. Server keys: name both models.
+    const models = requestCreds
+      ? [requestCreds.llm_provider]
+      : config?.models
+        ? [config.models.fast, config.models.reasoning]
+        : [];
+    setView({ name: "run", title: fields.company_name, subtitle: liveRunSubtitle(fields, models), fields });
     run.start({ mode: "live", fields, rawText: text.trim() || undefined, credentials: requestCreds });
   }
 
